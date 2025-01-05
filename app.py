@@ -213,9 +213,10 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
     
     if selected_model=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or "vision" in selected_model or "Vision" in selected_model:
         processor, model=load_model(selected_model, local_model_path)
-        terminators=get_terminators(processor)
+        tokenizer=processor.tokenizer
+        terminators=get_terminators(tokenizer)
         
-        image=Image.open(image_input)
+        image=image_input
         
         prompt_messages = []
         for user_msg, bot_msg in history:
@@ -228,17 +229,21 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
                 
         input_text=processor.apply_chat_template(
             prompt_messages,
+            tokenize=False,
             add_generation_prompt=True,
         )
         
-        input_ids=processor(
+        inputs=processor(
             image,
             input_text,
+            add_special_tokens=False,
             return_tensors="pt"
-        ).to(model.device)
+        )
+        
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
         
         outputs = model.generate(
-            input_ids,
+            **inputs,
             max_new_tokens=1024,
             eos_token_id=terminators,
             do_sample=True,
@@ -247,7 +252,7 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         )
         
         generated_text=processor.decode(
-            outputs[0][input_ids.shape[-1]:],
+            outputs[0],
             skip_special_tokens=True
         )
 
