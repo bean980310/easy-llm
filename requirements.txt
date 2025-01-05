@@ -1,6 +1,10 @@
 transformers
 huggingface_hub
+datasets
+safetensors
+tokenizers
 gradio
 torch
 torchvision
 torchaudio
+accelerate

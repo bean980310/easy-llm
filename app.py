@@ -196,6 +196,7 @@ def load_model(model_id, local_model_path=None):
             local_dirpath, 
             torch_dtype=torch.bfloat16, 
             device_map="auto")
+        model.tie_weights()
         models_cache[cache_key] = {"processor": processor, "model": model}
         return processor, model
     else:
@@ -233,12 +234,19 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             add_generation_prompt=True,
         )
         
-        inputs=processor(
-            image,
-            input_text,
-            add_special_tokens=False,
-            return_tensors="pt"
-        )
+        if image_input:
+            inputs=processor(
+                image,
+                input_text,
+                add_special_tokens=False,
+                return_tensors="pt"
+            )
+        else:
+            inputs=tokenizer(
+                input_text,
+                add_special_tokens=False,
+                return_tensors="pt"
+            )
         
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
         
@@ -465,4 +473,4 @@ with gr.Blocks() as demo:
             queue=False
         )
 
-demo.launch(debug=True, inbrowser=True)
+demo.launch(debug=True, inbrowser=True, server_port=7861)
