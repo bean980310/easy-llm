@@ -1,0 +1,6 @@
+transformers
+huggingface_hub
+gradio
+torch
+torchvision
+torchaudio
