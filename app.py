@@ -1,9 +1,11 @@
 import os
 import shutil
 from pathlib import Path
+from PIL import Image
+import requests
 import torch
 import gradio as gr
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForVision2Seq, LlavaForConditionalGeneration, MllamaForConditionalGeneration, AutoProcessor
 from huggingface_hub import snapshot_download
 
 ##########################################
@@ -188,65 +190,116 @@ def load_model(model_id, local_model_path=None):
 
     # 로컬 폴더에서 로드
     print(f"[*] 로컬 폴더 로드: {local_dirpath}")
-    tokenizer = AutoTokenizer.from_pretrained(local_dirpath)
-    model = AutoModelForCausalLM.from_pretrained(
-        local_dirpath,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-    )
-    models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
-    return tokenizer, model
+    if "vision" in model_id.lower() or model_id=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B":
+        processor=AutoProcessor.from_pretrained(local_dirpath)
+        model=MllamaForConditionalGeneration.from_pretrained(
+            local_dirpath, 
+            torch_dtype=torch.bfloat16, 
+            device_map="auto")
+        models_cache[cache_key] = {"processor": processor, "model": model}
+        return processor, model
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(local_dirpath)
+        model = AutoModelForCausalLM.from_pretrained(
+            local_dirpath,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
+        return tokenizer, model
 
 
-def generate_answer(history, selected_model, local_model_path=None):
-    # 모델 로드
-    tokenizer, model = load_model(selected_model, local_model_path)
+def generate_answer(history, selected_model, local_model_path=None, image_input=None):
+    
+    if selected_model=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or "vision" in selected_model or "Vision" in selected_model:
+        processor, model=load_model(selected_model, local_model_path)
+        terminators=get_terminators(processor)
+        
+        image=Image.open(image_input)
+        
+        prompt_messages = []
+        for user_msg, bot_msg in history:
+            if user_msg:
+                prompt_messages.append({"role": "user", "content": [
+                    {"type":"image"},
+                    {"type":"text", "text": user_msg}]})
+            if bot_msg:
+                prompt_messages.append({"role": "assistant", "content": bot_msg})
+                
+        input_text=processor.apply_chat_template(
+            prompt_messages,
+            add_generation_prompt=True,
+        )
+        
+        input_ids=processor(
+            image,
+            input_text,
+            return_tensors="pt"
+        ).to(model.device)
+        
+        outputs = model.generate(
+            input_ids,
+            max_new_tokens=1024,
+            eos_token_id=terminators,
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9
+        )
+        
+        generated_text=processor.decode(
+            outputs[0][input_ids.shape[-1]:],
+            skip_special_tokens=True
+        )
 
-    # 종결 토큰
-    terminators = get_terminators(tokenizer)
+    else:
+        # 모델 로드
+        tokenizer, model = load_model(selected_model, local_model_path)
 
-    # Gradio Chatbot 형식 → 모델 입력 형식 변환
-    prompt_messages = []
-    for user_msg, bot_msg in history:
-        if user_msg:
-            prompt_messages.append({"role": "user", "content": user_msg})
-        if bot_msg:
-            prompt_messages.append({"role": "assistant", "content": bot_msg})
+        # 종결 토큰
+        terminators = get_terminators(tokenizer)
 
-    input_ids = tokenizer.apply_chat_template(
-        prompt_messages,
-        add_generation_prompt=True,
-        return_tensors="pt"
-    ).to(model.device)
+        # Gradio Chatbot 형식 → 모델 입력 형식 변환
+        prompt_messages = []
+        for user_msg, bot_msg in history:
+            if user_msg:
+                prompt_messages.append({"role": "user", "content": user_msg})
+            if bot_msg:
+                prompt_messages.append({"role": "assistant", "content": bot_msg})
+            
+        input_ids = tokenizer.apply_chat_template(
+            prompt_messages,
+            add_generation_prompt=True,
+            return_tensors="pt"
+        ).to(model.device)
 
-    outputs = model.generate(
-        input_ids,
-        max_new_tokens=1024,
-        eos_token_id=terminators,
-        do_sample=True,
-        temperature=0.6,
-        top_p=0.9
-    )
+        outputs = model.generate(
+            input_ids,
+            max_new_tokens=1024,
+            eos_token_id=terminators,
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9
+        )
 
-    generated_text = tokenizer.decode(
-        outputs[0][input_ids.shape[-1]:],
-        skip_special_tokens=True
-    )
+        generated_text = tokenizer.decode(
+            outputs[0][input_ids.shape[-1]:],
+            skip_special_tokens=True
+        )
     return generated_text.strip()
 
 ##########################################
 # 3) Gradio UI
 ##########################################
 
-AVAILABLE_MODELS = [
-    "Bllossom/llama-3.2-Korean-Bllossom-3B",
-    "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-    "huggyllama/llama-7b",  
-    "EleutherAI/polyglot-ko-1.3b",
-    "meta-llama/Llama-3.2-11B-Vision-Instruct",
-    "meta-llama/Llama-3.1-8B",
-    "Local (Custom Path)"
-]
+# AVAILABLE_MODELS = [
+#     "Bllossom/llama-3.2-Korean-Bllossom-3B",
+#     "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
+#     "huggyllama/llama-7b",  
+#     "EleutherAI/polyglot-ko-1.3b",
+#     "meta-llama/Llama-3.2-11B-Vision-Instruct",
+#     "meta-llama/Llama-3.1-8B",
+#     "Local (Custom Path)"
+# ]
 
 with gr.Blocks() as demo:
     gr.Markdown("## 간단한 Chatbot")
@@ -313,8 +366,11 @@ with gr.Blocks() as demo:
         # -----------------------------------------
         # (C) Chatbot 섹션
         # -----------------------------------------
-        chatbot = gr.Chatbot(height=400, label="Chatbot")
-        msg = gr.Textbox(label="메시지 입력")
+        with gr.Row():
+            image_input = gr.Image(label="이미지 업로드 (선택)", type="pil")
+            with gr.Column():
+                chatbot = gr.Chatbot(height=400, label="Chatbot")
+                msg = gr.Textbox(label="메시지 입력")
         send_btn = gr.Button("보내기")
         history_state = gr.State([])
 
@@ -324,8 +380,8 @@ with gr.Blocks() as demo:
             history = history + [[user_input, None]]
             return "", history
 
-        def bot_message(history, selected_model, local_model_path=None):
-            answer = generate_answer(history, selected_model, local_model_path)
+        def bot_message(history, selected_model, local_model_path, image):
+            answer = generate_answer(history, selected_model, local_model_path, image)
             history[-1][1] = answer
             return history
 
@@ -336,7 +392,7 @@ with gr.Blocks() as demo:
             outputs=[msg, history_state]
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, local_path_text],
+            inputs=[history_state, model_dropdown, local_path_text, image_input],
             outputs=history_state
         ).then(
             fn=lambda h: h,
