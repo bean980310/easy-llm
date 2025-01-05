@@ -79,7 +79,7 @@ def download_model_from_hf(hf_repo_id: str, target_dir: str) -> str:
     snapshot_download(
         repo_id=hf_repo_id,
         local_dir=target_dir,
-        ignore_patterns=["README.md", ".gitattributes"]  
+        ignore_patterns=["*.md", ".gitattributes", "original/", "LICENSE.txt", "LICENSE"]
     )
     remove_hf_cache(hf_repo_id)
     print(f"[+] 다운로드 & 저장 완료: {target_dir}")
