@@ -201,20 +201,32 @@ def load_model(model_id, local_model_path=None, api_key=None):
     # 로컬 폴더에서 로드
     print(f"[*] 로컬 폴더 로드: {local_dirpath}")
     if "vision" in model_id.lower() or model_id=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B":
-        processor=AutoProcessor.from_pretrained(local_dirpath)
+        processor=AutoProcessor.from_pretrained(local_dirpath, trust_remote_code=True)
         model=MllamaForConditionalGeneration.from_pretrained(
             local_dirpath, 
             torch_dtype=torch.bfloat16, 
-            device_map="auto")
+            device_map="auto", trust_remote_code=True)
         model.tie_weights()
         models_cache[cache_key] = {"processor": processor, "model": model}
         return processor, model
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(local_dirpath)
+    elif model_id=="THUDM/glm-4v-9b":
+        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
         model = AutoModelForCausalLM.from_pretrained(
             local_dirpath,
             torch_dtype=torch.bfloat16,
             device_map="auto",
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        )
+        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
+        return tokenizer, model
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            local_dirpath,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
         )
         models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
         return tokenizer, model
@@ -297,7 +309,23 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             outputs[0],
             skip_special_tokens=True
         )
-
+        return generated_text.strip()
+    elif selected_model == "THUDM/glm-4v-9b":
+        tokenizer, model=load_model(selected_model, local_model_path)
+        prompt_messages = []
+        for user_msg, bot_msg in history:
+            if user_msg:
+                prompt_messages.append({"role": "user", "image": image, "content": user_msg})
+        
+        inputs=tokenizer.apply_chat_template(prompt_messages, add_generation_prompt=True, 
+                                             tokenize=True, return_tensors="pt",
+                                             return_dict=True).to(model.device)
+        
+        gen_kwargs = {"max_length": 2500, "do_sample": True, "top_k": 1}
+        with torch.no_grad():
+            outputs = model.generate(**inputs, **gen_kwargs)
+            outputs = outputs[:, inputs['input_ids'].shape[1]:]
+            return tokenizer.decode(outputs[0])
     else:
         # 모델 로드
         tokenizer, model = load_model(selected_model, local_model_path)
@@ -332,32 +360,33 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             outputs[0][input_ids.shape[-1]:],
             skip_special_tokens=True
         )
-    return generated_text.strip()
+        return generated_text.strip()
 
 ##########################################
 # 3) Gradio UI
 ##########################################
 
-# AVAILABLE_MODELS = [
-#     "Bllossom/llama-3.2-Korean-Bllossom-3B",
-#     "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-#     "huggyllama/llama-7b",  
-#     "EleutherAI/polyglot-ko-1.3b",
-#     "meta-llama/Llama-3.2-11B-Vision-Instruct",
-#     "meta-llama/Llama-3.1-8B",
-#     "Local (Custom Path)"
-# ]
-
 with gr.Blocks() as demo:
     gr.Markdown("## 간단한 Chatbot")
     known_hf_models = [
+        "meta-llama/Llama-3.1-8B",
+        "meta-llama/Llama-3.2-11B-Vision",
+        "meta-llama/Llama-3.2-11B-Vision-Instruct",
         "Bllossom/llama-3.2-Korean-Bllossom-3B",
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
         "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
-        "huggyllama/llama-7b",  
+        "THUDM/glm-4v-9b",
+        "huggyllama/llama-7b",
+        "OrionStarAI/Orion-14B-Base",
+        "OrionStarAI/Orion-14B-Chat",
+        "OrionStarAI/Orion-14B-LongChat",
+        "CohereForAI/aya-23-8B",
+        "CohereForAI/aya-23-35B",
+        "Qwen/Qwen2.5-7B",
+        "Qwen/Qwen2.5-7B-Instruct",
+        "Qwen/Qwen2.5-14B",
+        "Qwen/Qwen2.5-14B-Instruct",
         "EleutherAI/polyglot-ko-1.3b",
-        "meta-llama/Llama-3.2-11B-Vision-Instruct",
-        "meta-llama/Llama-3.1-8B",
         "gpt-4o-mini",
         "gpt-4o",
         "gpt-3.5-turbo"
@@ -447,8 +476,21 @@ with gr.Blocks() as demo:
             answer = generate_answer(history, selected_model, local_model_path, image, api_key)
             history[-1][1] = answer
             return history
+        def toggle_image_input(selected_model):
+            if "vision" in selected_model.lower() or selected_model == "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or selected_model == "THUDM/glm-4v-9b":
+                return gr.update(visible=True), "이미지를 업로드해주세요."
+            else:
+                return gr.update(visible=False), "이미지 입력이 필요하지 않습니다."
 
-
+        model_dropdown.change(
+            fn=toggle_api_key_display,
+            inputs=[model_dropdown],
+            outputs=[api_key_text]
+        ).then(
+            fn=toggle_image_input,
+            inputs=[model_dropdown],
+            outputs=[image_input, gr.Markdown("description")]
+        )
         msg.submit(
             fn=user_message,
             inputs=[msg, history_state],
