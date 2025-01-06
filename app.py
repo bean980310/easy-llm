@@ -13,8 +13,15 @@ from transformers import (
 from huggingface_hub import snapshot_download
 import openai
 import logging
-from logging.handlers import RotatingFileHandler 
-
+from logging.handlers import RotatingFileHandler
+from model_handlers import MiniCPMLlama3V25Handler, GLM4VHandler, VisionModelHandler
+from utils import (
+    make_local_dir_name,
+    scan_local_models,
+    remove_hf_cache,
+    download_model_from_hf,
+    ensure_model_available
+)
 ##########################################
 # 1) 유틸 함수들
 ##########################################
@@ -57,79 +64,6 @@ class StopOnTokens(StoppingCriteria):
         if input_ids[0][-1] in self.stop_ids:
             return True
         return False
-
-def make_local_dir_name(model_id: str) -> str:
-    return model_id.replace("/", "__")
-
-def convert_folder_to_modelid(folder_name: str) -> str:
-    """
-    Bllossom__llama-3.2-Korean-Bllossom-3B
-    => Bllossom/llama-3.2-Korean-Bllossom-3B
-    """
-    return folder_name.replace("__", "/")
-
-def scan_local_models(root=LOCAL_MODELS_ROOT):
-    """
-    ./models 폴더 아래를 스캔하여,
-    'config.json' 파일이 존재하는 서브폴더를 모델 폴더로 간주,
-    ['폴더이름1', '폴더이름2', ...] 형태의 리스트를 반환.
-    예: './models/Bllossom__llama-3.2-Korean-Bllossom-3B' 라면
-        폴더 이름 'Bllossom__llama-3.2-Korean-Bllossom-3B'를 목록에 추가.
-    """
-    if not os.path.isdir(root):
-        os.makedirs(root, exist_ok=True)
-
-    local_model_ids = []
-    for folder in os.listdir(root):
-        full_path = os.path.join(root, folder)
-        if os.path.isdir(full_path) and 'config.json' in os.listdir(full_path):
-            model_id = convert_folder_to_modelid(folder)
-            local_model_ids.append(model_id)
-    logger.info(f"Scanned local models: {local_model_ids}")
-    return local_model_ids
-
-def remove_hf_cache(model_id):
-    """
-    model_id에 대응하는 Hugging Face Hub 캐시 폴더를 찾아 삭제한다.
-    예) '~/.cache/huggingface/hub/models--Bllossom--llama-3.2-Korean-Bllossom-3B'
-
-    (아래 예시는 .cache 폴더를 ./models/{user}__{name}/.cache 형태로 가정하여 처리)
-    필요에 맞게 수정 가능.
-    """
-    if "/" in model_id:
-        user, name = model_id.split("/", maxsplit=1)
-        cache_dirname = f"./models/{user}__{name}"
-    else:
-        cache_dirname = f"./models/{model_id}"
-
-    cache_path = os.path.join(cache_dirname, ".cache")  # 예시로 ".cache" 폴더를 사용
-    if os.path.isdir(cache_path):
-        logger.info(f"[*] 캐시 폴더 삭제: {cache_path}")
-        shutil.rmtree(cache_path)
-    else:
-        logger.info(f"[*] 캐시 폴더 없음: {cache_path}")
-
-def download_model_from_hf(hf_repo_id: str, target_dir: str) -> str:
-    """
-    Hugging Face repo id를 target_dir에 스냅샷 다운로드.
-    - 반환값: 결과 메시지
-    """
-    if os.path.isdir(target_dir):
-        msg=f"[*] 이미 다운로드됨: {hf_repo_id} → {target_dir}"
-        logger.info(msg)
-        return msg
-    
-    os.makedirs(target_dir, exist_ok=True)
-    logger.info(f"[*] 모델 '{hf_repo_id}'을(를) '{target_dir}'에 다운로드 중...")
-    snapshot_download(
-        repo_id=hf_repo_id,
-        local_dir=target_dir,
-        ignore_patterns=["*.md", ".gitattributes", "original/", "LICENSE.txt", "LICENSE"]
-    )
-    remove_hf_cache(hf_repo_id)
-    logger.info(f"[+] 다운로드 & 저장 완료: {target_dir}")
-    
-    return f"모델 '{hf_repo_id}' 다운로드 완료 → 로컬 폴더 '{target_dir}'에 저장했습니다."
 
 def build_model_cache_key(model_id: str, local_path: str = None) -> str:
     """
@@ -197,118 +131,79 @@ def get_terminators(tokenizer):
         tokenizer.convert_tokens_to_ids("<|eot_id|>")
     ]
 
+# app.py
+
 def load_model(model_id, local_model_path=None, api_key=None):
     """
-    1) Local (Custom Path) -> local_model_path
-    2) 그렇지 않다면 -> ./models/{model_id 치환} 폴더가 없으면 snapshot_download
+    모델 로드 함수. 특정 모델에 대한 로드 로직을 외부 핸들러로 분리.
     """
-    cache_key = build_model_cache_key(model_id, local_model_path)
-
-    # 캐시가 있으면 바로 반환
-    if cache_key in models_cache:
-        logger.info(f"[*] 메모리 캐시 사용: {cache_key}")
-        return models_cache[cache_key].get("tokenizer"), models_cache[cache_key].get("model")
-    
-    # 로컬 경로(사용자 지정)
-    if model_id == "Local (Custom Path)" and local_model_path:
-        logger.info(f"[*] 사용자 로컬 경로에서 모델 로드: {local_model_path}")
-        tokenizer = AutoTokenizer.from_pretrained(local_model_path)
-        model = AutoModelForCausalLM.from_pretrained(
-            local_model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
-        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
-        return tokenizer, model
-    
-    if "gpt" in model_id:
-        if not api_key:
-            raise ValueError("OpenAI API Key가 필요합니다.")
-        # OpenAI 모델의 경우, 로컬에 모델을 로드하지 않고 API 호출에 필요한 설정을 캐시에 저장
-        models_cache[cache_key] = {"api_key": api_key}
-        logger.info(f"[*] OpenAI API 모델 설정 저장: {model_id}")
-        return None, None  # 외부 API 모델은 로컬 모델이 아니므로 None 반환
-
-    # 미리 지정된 모델 ID
-    local_dirname = make_local_dir_name(model_id)
-    local_dirpath = os.path.join(LOCAL_MODELS_ROOT, local_dirname)
-
-    # 없다면 다운로드
-    if not os.path.isdir(local_dirpath):
-        logger.info(f"[*] 폴더가 없어 다운로드 진행: {model_id} -> {local_dirpath}")
-        snapshot_download(
-            repo_id=model_id,
-            local_dir=local_dirpath,
-            ignore_patterns=["README.md", ".gitattributes"]
-        )
-        remove_hf_cache(model_id)
-        logger.info(f"[*] 다운로드 & 캐시정리 완료: {local_dirpath}")
-
-    # 로컬 폴더에서 로드
-    logger.info(f"[*] 로컬 폴더 로드: {local_dirpath}")
-    if "vision" in model_id.lower() or model_id == "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B":
-        processor = AutoProcessor.from_pretrained(
-            local_dirpath,
-            trust_remote_code=True,
-            # Deprecated 인수 제거 또는 적절히 설정
-            # slow_image_processor_class=None,
-            # fast_image_processor_class=None
-        )
-        model = MllamaForConditionalGeneration.from_pretrained(
-            local_dirpath, 
-            torch_dtype=torch.bfloat16, 
-            device_map="auto", trust_remote_code=True)
-        model.tie_weights()
-        models_cache[cache_key] = {"processor": processor, "model": model}
-        logger.info(f"[*] 모델 로드 완료: {model_id}")
-        return processor, model
-    elif model_id == "openbmb/MiniCPM-Llama3-V-2_5":
-        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
-        model = AutoModel.from_pretrained(
-            local_dirpath,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
-        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
-        logger.info(f"[*] 모델 로드 완료: {model_id}")
-        return tokenizer, model
+    if model_id == "openbmb/MiniCPM-Llama3-V-2_5":
+        # 모델 존재 확인 및 다운로드
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = MiniCPMLlama3V25Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
+    elif model_id in [
+        "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
+    ] or "vision" in model_id.lower():
+        # 모델 존재 확인 및 다운로드
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = VisionModelHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
     elif model_id == "THUDM/glm-4v-9b":
-        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, 
-                                                  trust_remote_code=True, 
-                                                  encode_special_tokens=True)
-        model = AutoModel.from_pretrained(
-            local_dirpath,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            low_cpu_mem_usage=True,
-            trust_remote_code=True
-        ).eval()
-        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
-        logger.info(f"[*] 모델 로드 완료: {model_id}")
-        return tokenizer, model
+        # 모델 존재 확인 및 다운로드
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = GLM4VHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
     else:
-        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            local_dirpath,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        )
-        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
-        logger.info(f"[*] 모델 로드 완료: {model_id}")
-        return tokenizer, model
+        # 기존 로직 유지
+        logger.info(f"[*] Loading model: {model_id}")
+        local_dirname = make_local_dir_name(model_id)
+        local_dirpath = os.path.join(LOCAL_MODELS_ROOT, local_dirname)
+
+        # 모델 존재 확인 및 다운로드
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+
+        # 로컬 폴더에서 로드
+        logger.info(f"[*] 로컬 폴더 로드: {local_dirpath}")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
+            model = AutoModelForCausalLM.from_pretrained(
+                local_dirpath,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                trust_remote_code=True
+            )
+            models_cache[model_id] = {"tokenizer": tokenizer, "model": model}
+            logger.info(f"[*] 모델 로드 완료: {model_id}")
+            return models_cache[model_id]
+        except Exception as e:
+            logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+            return None
+
+# app.py
 
 def generate_answer(history, selected_model, local_model_path=None, image_input=None, api_key=None):
     """
-    history: list of dicts with 'role' and 'content' keys
+    사용자 히스토리를 기반으로 답변 생성.
     """
     cache_key = build_model_cache_key(selected_model, local_model_path)
     model_cache = models_cache.get(cache_key, {})
     
     if "gpt" in selected_model:
         if not api_key:
-            raise ValueError("OpenAI API Key가 필요합니다.")
+            logger.error("OpenAI API Key is missing.")
+            return "OpenAI API Key가 필요합니다."
         openai.api_key = api_key
         messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
         logger.info(f"[*] OpenAI API 요청: {messages}")
@@ -331,184 +226,58 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
     elif selected_model in [
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
     ] or "vision" in selected_model.lower():
-        processor, model = load_model(selected_model, local_model_path)
-        if processor is None or model is None:
-            return "모델 로드에 실패했습니다."
+        handler: VisionModelHandler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
         
-        tokenizer = processor.tokenizer if hasattr(processor, 'tokenizer') else model.tokenizer
-        terminators = get_terminators(tokenizer)
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
         
-        # 메시지 히스토리 변환
-        prompt_messages = []
-        for msg in history:
-            if msg['role'] == 'user':
-                if image_input:
-                    prompt_messages.append({
-                        "role": "user", 
-                        "content": "Please see the attached image."
-                    })
-                    prompt_messages.append({
-                        "role": "user",
-                        "content": msg['content']
-                    })
-                else:
-                    prompt_messages.append({"role": "user", "content": msg['content']})
-            elif msg['role'] == 'assistant':
-                prompt_messages.append({"role": "assistant", "content": msg['content']})
-        
-        # 이미지가 필요한 모델일 경우 이미지 처리
-        if image_input and ("vision" in selected_model.lower() or selected_model == "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B"):
-            try:
-                inputs = processor(
-                    image_input,
-                    prompt_messages,
-                    add_special_tokens=False,
-                    return_tensors="pt"
-                )
-                logger.info("[*] 이미지 입력 처리 완료")
-            except Exception as e:
-                logger.error(f"입력 처리 중 오류 발생: {str(e)}")
-                return f"입력 처리 중 오류 발생: {str(e)}"
-        else:
-            try:
-                inputs = tokenizer(
-                    [msg['content'] for msg in prompt_messages if msg['role'] in ['user', 'assistant']],
-                    add_special_tokens=False,
-                    return_tensors="pt"
-                )
-                logger.info("[*] 텍스트 입력 처리 완료")
-            except Exception as e:
-                logger.error(f"입력 처리 중 오류 발생: {str(e)}")
-                return f"입력 처리 중 오류 발생: {str(e)}"
-        
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        
-        try:
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=1024,
-                eos_token_id=terminators,
-                do_sample=True,
-                temperature=0.6,
-                top_p=0.9
-            )
-            logger.info("[*] 모델 생성 완료")
-        except Exception as e:
-            logger.error(f"모델 생성 중 오류 발생: {str(e)}")
-            return f"모델 생성 중 오류 발생: {str(e)}"
-        try:
-            generated_text = processor.decode(
-                outputs[0],
-                skip_special_tokens=True
-            )
-            logger.info(f"[*] 생성된 텍스트: {generated_text}")
-        except Exception as e:
-            logger.error(f"출력 디코딩 중 오류 발생: {str(e)}")
-            return f"출력 디코딩 중 오류 발생: {str(e)}"
-        
-        return generated_text.strip()
+        logger.info(f"[*] Generating answer using VisionModelHandler")
+        answer = handler.generate_answer(history, image_input)
+        return answer
     
     elif selected_model == "openbmb/MiniCPM-Llama3-V-2_5":
-        tokenizer, model = load_model(selected_model, local_model_path)
-        if tokenizer is None or model is None:
-            return "모델 로드에 실패했습니다."
+        handler: MiniCPMLlama3V25Handler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
         
-        prompt_messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
-        logger.info(f"[*] Prompt messages for MiniCPM: {prompt_messages}")
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
         
-        try:
-            # 'model.chat' 대신 'model.generate' 사용
-            input_ids = tokenizer(
-                [msg['content'] for msg in prompt_messages if msg['role'] in ['user', 'assistant']],
-                return_tensors='pt',
-                add_special_tokens=True
-            ).input_ids.to(model.device)
-            logger.info("[*] Input IDs 생성 완료")
-            
-            outputs = model.generate(
-                input_ids,
-                max_new_tokens=1024,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.9
-            )
-            logger.info("[*] 모델 생성 완료")
-            
-            generated_text = tokenizer.decode(
-                outputs[0][input_ids.shape[-1]:],
-                skip_special_tokens=True
-            )
-            logger.info(f"[*] 생성된 텍스트: {generated_text}")
-            return generated_text.strip()
-        except Exception as e:
-            logger.error(f"모델 생성 중 오류 발생: {str(e)}")
-            return f"모델 생성 중 오류 발생: {str(e)}"
+        logger.info(f"[*] Generating answer using MiniCPMLlama3V25Handler")
+        answer = handler.generate_answer(history)
+        return answer
     
     elif selected_model == "THUDM/glm-4v-9b":
-        tokenizer, model = load_model(selected_model, local_model_path)
-        if tokenizer is None or model is None:
-            return "모델 로드에 실패했습니다."
-        
-        prompt_messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
-        logger.info(f"[*] Prompt messages for GLM: {prompt_messages}")
-        
-        try:
-            inputs = tokenizer.apply_chat_template(
-                prompt_messages, add_generation_prompt=True, 
-                tokenize=True, return_tensors="pt",
-                return_dict=True
-            ).to(next(model.parameters()).device)
-            logger.info("[*] GLM 입력 템플릿 적용 완료")
-        except Exception as e:
-            logger.error(f"입력 템플릿 적용 중 오류 발생: {str(e)}")
-            return f"입력 템플릿 적용 중 오류 발생: {str(e)}"
-        
-        streamer = TextIteratorStreamer(
-            tokenizer=tokenizer,
-            timeout=60,
-            skip_prompt=True,
-            skip_special_tokens=True
-        )
-        
-        input_ids = inputs["input_ids"]
-        logger.info("[*] Streamer 준비 완료")
-        
-        stop_ids = model.config.eos_token_id
-        stopping_criteria = StoppingCriteriaList([StopOnTokens(stop_ids)])
-        generate_kwargs = {
-            **inputs,
-            "streamer": streamer,
-            "max_new_tokens": 1024,
-            "do_sample": True,
-            "top_p": 0.8,
-            "temperature": 0.6,
-            "stopping_criteria": stopping_criteria,
-            "repetition_penalty": 1.2,
-            "eos_token_id": [151329, 151336, 151338],
-        }
-        
-        t = Thread(target=model.generate, kwargs=generate_kwargs)
-        t.start()
-        logger.info("[*] 모델 생성 스레드 시작")
-        
-        response = ""
-        try:
-            for new_token in streamer:
-                if new_token:
-                    response += new_token
-        except Exception as e:
-            logger.error(f"스트리밍 중 오류 발생: {str(e)}")
-            return f"스트리밍 중 오류 발생: {str(e)}"
-        
-        generated_text = response
-        logger.info(f"[*] 생성된 텍스트: {generated_text}")
-        
-        return generated_text.strip()
+        handler: GLM4VHandler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
+
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
+
+        logger.info(f"[*] Generating answer using GLM4VHandler")
+        answer = handler.generate_answer(history)
+        return answer
     else:
         # 다른 모델 처리
-        tokenizer, model = load_model(selected_model, local_model_path)
-        if tokenizer is None or model is None:
+        handler = load_model(selected_model, local_model_path=local_model_path)
+        if not handler:
             return "모델 로드에 실패했습니다."
+
+        # 기존 로직
+        tokenizer = handler.get("tokenizer")
+        model = handler.get("model")
+        if not tokenizer or not model:
+            logger.error("토크나이저 또는 모델이 로드되지 않았습니다.")
+            return "토크나이저 또는 모델이 로드되지 않았습니다."
 
         terminators = get_terminators(tokenizer)
         prompt_messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
@@ -590,17 +359,18 @@ with gr.Blocks() as demo:
             label="모델 선택",
             choices=initial_choices,
             value=initial_choices[0] if len(initial_choices) > 0 else None,
-            )
+        )
         local_path_text = gr.Textbox(
-        label="(Local Path) 로컬 폴더 경로",
-        placeholder="./models/my-llama",
-        visible=False  # 기본적으로 숨김
+            label="(Local Path) 로컬 폴더 경로",
+            placeholder="./models/my-llama",
+            visible=False  # 기본적으로 숨김
         )
         api_key_text = gr.Textbox(
-                label="OpenAI API Key",
-                placeholder="sk-...",
-                visible=False  # 기본적으로 숨김
-            )
+            label="OpenAI API Key",
+            placeholder="sk-...",
+            visible=False  # 기본적으로 숨김
+        )
+        image_info = gr.Markdown("", visible=False)
         with gr.Column():
             # image_input을 먼저 정의합니다.
             with gr.Row():
@@ -610,6 +380,41 @@ with gr.Blocks() as demo:
         send_btn = gr.Button("보내기")
         history_state = gr.State([])
 
+        def toggle_api_key_display(selected_model):
+            """
+            OpenAI API Key 입력 필드와 로컬 경로 입력 필드의 가시성을 제어합니다.
+            """
+            api_visible = "gpt" in selected_model
+            local_path_visible = selected_model == "Local (Custom Path)"
+            return gr.update(visible=api_visible), gr.update(visible=local_path_visible)
+    
+        def toggle_image_input(selected_model):
+            """
+            이미지 업로드 필드와 정보 메시지의 가시성을 제어합니다.
+            """
+            requires_image = (
+                "vision" in selected_model.lower() or
+                selected_model in [
+                    "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
+                    "THUDM/glm-4v-9b",
+                    "openbmb/MiniCPM-Llama3-V-2_5"
+                ]
+            )
+            if requires_image:
+                return gr.update(visible=True), "이미지를 업로드해주세요."
+            else:
+                return gr.update(visible=False), "이미지 입력이 필요하지 않습니다."
+    
+        # 모델 드롭다운 변경 시 함수 연결
+        model_dropdown.change(
+            fn=toggle_api_key_display,
+            inputs=[model_dropdown],
+            outputs=[api_key_text, local_path_text]
+        ).then(
+            fn=toggle_image_input,
+            inputs=[model_dropdown],
+            outputs=[image_input, image_info]  # 인스턴스를 사용
+        )
         def user_message(user_input, history):
             if not user_input.strip():
                 return "", history
@@ -654,49 +459,6 @@ with gr.Blocks() as demo:
             inputs=history_state,
             outputs=chatbot
         )
-            
-            
-        image_info = gr.Markdown("", visible=False)
-            
-        def toggle_api_key_display(selected_model):
-            """
-            OpenAI API Key 입력 필드와 로컬 경로 입력 필드의 가시성을 제어합니다.
-            """
-            api_visible = "gpt" in selected_model
-            local_path_visible = selected_model == "Local (Custom Path)"
-            return gr.update(visible=api_visible), gr.update(visible=local_path_visible)
-    
-        def toggle_image_input(selected_model):
-            """
-            이미지 업로드 필드와 정보 메시지의 가시성을 제어합니다.
-            """
-            requires_image = (
-                "vision" in selected_model.lower() or
-                selected_model in [
-                    "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-                    "THUDM/glm-4v-9b",
-                    "openbmb/MiniCPM-Llama3-V-2_5"
-                ]
-            )
-            if requires_image:
-                return gr.update(visible=True), "이미지를 업로드해주세요."
-            else:
-                return gr.update(visible=False), "이미지 입력이 필요하지 않습니다."
-    
-            # 모델 드롭다운 변경 시 함수 연결
-        model_dropdown.change(
-            fn=toggle_api_key_display,
-            inputs=[model_dropdown],
-            outputs=[api_key_text, local_path_text]
-        ).then(
-            fn=toggle_image_input,
-            inputs=[model_dropdown],
-            outputs=[image_input, image_info]  # 인스턴스를 사용
-        )
-
-            # -----------------------------------------
-            # (C) Chatbot 섹션
-            # -----------------------------------------
     with gr.Tab("다운로드"):
         gr.Markdown("### 모델 다운로드")
         download_mode = gr.Radio(
@@ -764,6 +526,7 @@ with gr.Blocks() as demo:
             new_choices = known_hf_models + new_local_models + ["Local (Custom Path)"]
             new_choices = list(dict.fromkeys(new_choices))
             # 반환값:
+            logger.info("모델 목록 새로고침")
             return gr.update(choices=new_choices), "모델 목록을 새로고침 했습니다."
             
         refresh_button.click(
