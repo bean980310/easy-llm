@@ -7,6 +7,7 @@ import torch
 import gradio as gr
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForVision2Seq, LlavaForConditionalGeneration, MllamaForConditionalGeneration, AutoProcessor
 from huggingface_hub import snapshot_download
+import openai
 
 ##########################################
 # 1) 유틸 함수들
@@ -96,6 +97,8 @@ def build_model_cache_key(model_id: str, local_path: str = None) -> str:
     """
     if model_id == "Local (Custom Path)" and local_path:
         return f"local::{local_path}"
+    elif "gpt" in model_id:
+        return f"api::{model_id}"
     else:
         local_dirname = make_local_dir_name(model_id)
         local_dirpath = os.path.join("./models", local_dirname)
@@ -149,7 +152,7 @@ def get_terminators(tokenizer):
         tokenizer.convert_tokens_to_ids("<|eot_id|>")
     ]
 
-def load_model(model_id, local_model_path=None):
+def load_model(model_id, local_model_path=None, api_key=None):
     """
     1) Local (Custom Path) -> local_model_path
     2) 그렇지 않다면 -> ./models/{model_id 치환} 폴더가 없으면 snapshot_download
@@ -172,6 +175,13 @@ def load_model(model_id, local_model_path=None):
         )
         models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
         return tokenizer, model
+    
+    if "gpt" in model_id:
+        if not api_key:
+            raise ValueError("OpenAI API Key가 필요합니다.")
+        # OpenAI 모델의 경우, 로컬에 모델을 로드하지 않고 API 호출에 필요한 설정을 캐시에 저장
+        models_cache[cache_key] = {"api_key": api_key}
+        return None, None  # 외부 API 모델은 로컬 모델이 아니므로 None 반환
 
     # 미리 지정된 모델 ID
     local_dirname = make_local_dir_name(model_id)
@@ -210,9 +220,33 @@ def load_model(model_id, local_model_path=None):
         return tokenizer, model
 
 
-def generate_answer(history, selected_model, local_model_path=None, image_input=None):
+def generate_answer(history, selected_model, local_model_path=None, image_input=None, api_key=None):
     
-    if selected_model=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or "vision" in selected_model or "Vision" in selected_model:
+    cache_key = build_model_cache_key(selected_model, local_model_path)
+    model_cache = models_cache.get(cache_key, {})
+    
+    if "gpt" in selected_model:
+        if not api_key:
+            raise ValueError("OpenAI API Key가 필요합니다.")
+        openai.api_key = api_key
+        messages = []
+        for user_msg, bot_msg in history:
+            if user_msg:
+                messages.append({"role": "user", "content": user_msg})
+            if bot_msg:
+                messages.append({"role": "assistant", "content": bot_msg})
+        if image_input:
+            pass
+        
+        response = openai.ChatCompletion.create(
+            model=selected_model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
+            top_p=0.9
+        )
+        return response.choices[0].message["content"]
+    elif selected_model=="Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or "vision" in selected_model or "Vision" in selected_model:
         processor, model=load_model(selected_model, local_model_path)
         tokenizer=processor.tokenizer
         terminators=get_terminators(tokenizer)
@@ -324,6 +358,9 @@ with gr.Blocks() as demo:
         "EleutherAI/polyglot-ko-1.3b",
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
         "meta-llama/Llama-3.1-8B",
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-3.5-turbo"
     ]
     with gr.Tab("메인"):
         local_model_folders = scan_local_models()
@@ -341,6 +378,19 @@ with gr.Blocks() as demo:
                     label="(Local Path) 로컬 폴더 경로",
                     placeholder="./models/my-llama"
                 )
+        api_key_text = gr.Textbox(
+            label="OpenAI API Key",
+            placeholder="sk-...",
+            visible=False  # 기본적으로 숨김
+        )
+        def toggle_api_key_display(selected_model):
+            return gr.update(visible="gpt" in selected_model)
+    
+        model_dropdown.change(
+            fn=toggle_api_key_display,
+            inputs=[model_dropdown],
+            outputs=[api_key_text]
+        )
         
         with gr.Row():
             with gr.Column():
@@ -393,8 +443,8 @@ with gr.Blocks() as demo:
             history = history + [[user_input, None]]
             return "", history
 
-        def bot_message(history, selected_model, local_model_path, image):
-            answer = generate_answer(history, selected_model, local_model_path, image)
+        def bot_message(history, selected_model, local_model_path, image, api_key):
+            answer = generate_answer(history, selected_model, local_model_path, image, api_key)
             history[-1][1] = answer
             return history
 
@@ -405,7 +455,7 @@ with gr.Blocks() as demo:
             outputs=[msg, history_state]
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, local_path_text, image_input],
+            inputs=[history_state, model_dropdown, local_path_text, image_input, api_key_text],
             outputs=history_state
         ).then(
             fn=lambda h: h,
@@ -419,7 +469,7 @@ with gr.Blocks() as demo:
             outputs=[msg, history_state]
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown],
+            inputs=[history_state, model_dropdown, local_path_text, image_input, api_key_text],
             outputs=history_state
         ).then(
             fn=lambda h: h,
