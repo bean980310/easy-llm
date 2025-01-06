@@ -2,10 +2,11 @@ import os
 import shutil
 from pathlib import Path
 from PIL import Image
+from threading import Thread
 import requests
 import torch
 import gradio as gr
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForVision2Seq, LlavaForConditionalGeneration, MllamaForConditionalGeneration, AutoProcessor
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoModelForVision2Seq, LlavaForConditionalGeneration, MllamaForConditionalGeneration, AutoProcessor, TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
 from huggingface_hub import snapshot_download
 import openai
 
@@ -16,6 +17,17 @@ import openai
 # 메모리 상에 로드된 모델들을 저장하는 캐시
 LOCAL_MODELS_ROOT = "./models"
 models_cache = {}
+
+class StopOnTokens(StoppingCriteria):
+    def __init__(self, stop_ids):
+        super().__init__()
+        self.stop_ids = stop_ids
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        # 마지막 생성된 토큰이 stop_ids에 있는지 확인
+        if input_ids[0][-1] in self.stop_ids:
+            return True
+        return False
 
 def make_local_dir_name(model_id: str) -> str:
     return model_id.replace("/", "__")
@@ -209,15 +221,28 @@ def load_model(model_id, local_model_path=None, api_key=None):
         model.tie_weights()
         models_cache[cache_key] = {"processor": processor, "model": model}
         return processor, model
-    elif model_id=="THUDM/glm-4v-9b":
+    elif model_id=="openbmb/MiniCPM-Llama3-V-2_5":
         tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
+        model = AutoModel.from_pretrained(
+            local_dirpath,
+            attn_implementation='sdpa',
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
+        return tokenizer, model
+    elif model_id=="THUDM/glm-4v-9b":
+        tokenizer = AutoTokenizer.from_pretrained(local_dirpath, 
+                                                  trust_remote_code=True, 
+                                                  encode_special_tokens=True)
+        model = AutoModel.from_pretrained(
             local_dirpath,
             torch_dtype=torch.bfloat16,
             device_map="auto",
             low_cpu_mem_usage=True,
             trust_remote_code=True
-        )
+        ).eval()
         models_cache[cache_key] = {"tokenizer": tokenizer, "model": model}
         return tokenizer, model
     else:
@@ -310,22 +335,84 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             skip_special_tokens=True
         )
         return generated_text.strip()
-    elif selected_model == "THUDM/glm-4v-9b":
+    elif selected_model == "openbmb/MiniCPM-Llama3-V-2_5":
         tokenizer, model=load_model(selected_model, local_model_path)
-        prompt_messages = []
+        prompt_messages=[]
         for user_msg, bot_msg in history:
             if user_msg:
-                prompt_messages.append({"role": "user", "image": image, "content": user_msg})
+                prompt_messages.append({"role": "user", 'content':[image_input, user_msg]})
+            if bot_msg:
+                prompt_messages.append({"role": "assistant", "content": bot_msg})
+             
+        if image_input:
+            res = model.chat(
+                image=image_input,
+                msgs=prompt_messages,
+                tokenizer=tokenizer,
+                sampling=True,
+                temperature=0.7,
+                stream=True
+            )
+        else:
+            res = model.chat(
+                image=None,
+                msgs=prompt_messages,
+                tokenizer=tokenizer,
+                sampling=True,
+                temperature=0.7,
+                stream=True
+            )
+        generated_text = ""
+        for new_text in res:
+            generated_text += new_text
+        return generated_text.strip()
         
+    elif selected_model == "THUDM/glm-4v-9b":
+        tokenizer, model=load_model(selected_model, local_model_path)
+        prompt_messages=[]
+        for user_msg, bot_msg in history:
+            if user_msg:
+                prompt_messages.append({"role": "user", "image": image_input, "content": user_msg})
+            if bot_msg:
+                prompt_messages.append({"role": "assistant", "content": bot_msg})
+                
         inputs=tokenizer.apply_chat_template(prompt_messages, add_generation_prompt=True, 
                                              tokenize=True, return_tensors="pt",
-                                             return_dict=True).to(model.device)
+                                             return_dict=True).to(next(model.parameters()).device)
         
-        gen_kwargs = {"max_length": 2500, "do_sample": True, "top_k": 1}
-        with torch.no_grad():
-            outputs = model.generate(**inputs, **gen_kwargs)
-            outputs = outputs[:, inputs['input_ids'].shape[1]:]
-            return tokenizer.decode(outputs[0])
+        streamer = TextIteratorStreamer(
+            tokenizer=tokenizer,
+            timeout=60,
+            skip_prompt=True,
+            skip_special_tokens=True
+        )
+        
+        input_ids = inputs["input_ids"]
+        
+        stop_ids = model.config.eos_token_id
+        stopping_criteria = StoppingCriteriaList([StopOnTokens(stop_ids)])
+        generate_kwargs = {
+            **inputs,
+            "streamer": streamer,
+            "max_new_tokens": 1024,
+            "do_sample": True,
+            "top_p": 0.8,
+            "temperature": 0.6,
+            "stopping_criteria": stopping_criteria,
+            "repetition_penalty": 1.2,
+            "eos_token_id": [151329, 151336, 151338],
+        }
+        
+        t = Thread(target=model.generate, kwargs=generate_kwargs)
+        t.start()
+        
+        response = ""
+        for new_token in streamer:
+            if new_token:
+                response += new_token
+        generated_text = response
+        
+        return generated_text.strip()
     else:
         # 모델 로드
         tokenizer, model = load_model(selected_model, local_model_path)
@@ -372,6 +459,7 @@ with gr.Blocks() as demo:
         "meta-llama/Llama-3.1-8B",
         "meta-llama/Llama-3.2-11B-Vision",
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
+        "openbmb/MiniCPM-Llama3-V-2_5",
         "Bllossom/llama-3.2-Korean-Bllossom-3B",
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
         "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
@@ -477,7 +565,7 @@ with gr.Blocks() as demo:
             history[-1][1] = answer
             return history
         def toggle_image_input(selected_model):
-            if "vision" in selected_model.lower() or selected_model == "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or selected_model == "THUDM/glm-4v-9b":
+            if "vision" in selected_model.lower() or selected_model == "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B" or selected_model == "THUDM/glm-4v-9b" or selected_model == "openbmb/MiniCPM-Llama3-V-2_5":
                 return gr.update(visible=True), "이미지를 업로드해주세요."
             else:
                 return gr.update(visible=False), "이미지 입력이 필요하지 않습니다."
