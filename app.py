@@ -169,7 +169,7 @@ def load_model(model_id, local_model_path=None, api_key=None):
         handler = GLM4HfHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
         models_cache[model_id] = handler
         return handler
-    elif model_id in ["CohereForAI/aya-23-8B", "CohereForAI/aya-23-35B"]:
+    elif model_id == "CohereForAI/aya-23-8B" or model_id == "CohereForAI/aya-23-35B":
         if not ensure_model_available(model_id, local_model_path):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None
@@ -294,7 +294,7 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         logger.info(f"[*] Generating answer using GLM4Handler")
         answer = handler.generate_answer(history)
         return answer
-    elif selected_model in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+    elif selected_model == "THUDM/glm-4-9b-chat-hf" or selected_model == "THUDM/glm-4-9b-chat-1m-hf":
         handler: GLM4HfHandler = models_cache.get(selected_model)
         if not handler:
             logger.info(f"[*] 모델 로드 중: {selected_model}")

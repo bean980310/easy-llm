@@ -31,16 +31,13 @@ class Aya23Handler:
             raise
 
     def _get_message_format(self, prompts):
-        """
-        Convert prompts to the required message format.
-        
-        Args:
-            prompts (list): List of prompt strings
-            
-        Returns:
-            list: Formatted messages for the model
-        """
-        return [[{"role": "user", "content": p}] for p in prompts]
+        formatted_messages = []
+        for p in prompts:
+            if not isinstance(p, str):
+                logger.warning(f"Unexpected prompt type: {type(p)}. Converting to string.")
+                p = str(p)
+            formatted_messages.append({"role": "user", "content": p})
+        return formatted_messages
 
     def generate_answer(
             self,
