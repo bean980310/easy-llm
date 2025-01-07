@@ -2,7 +2,8 @@
 
 import torch
 import logging
-from transformers import AutoTokenizer, AutoProcessor, AutoModelForCausalLM
+import traceback
+from transformers import AutoTokenizer, AutoProcessor, AutoModel
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class VisionModelHandler:
             self.processor = AutoProcessor.from_pretrained(self.model_dir, trust_remote_code=True)
             
             logger.info(f"[*] Loading model from {self.model_dir}")
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self.model = AutoModel.from_pretrained(
                 self.model_dir,
                 torch_dtype=torch.bfloat16,
                 device_map="auto",
@@ -31,7 +32,7 @@ class VisionModelHandler:
             ).eval()
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
-            logger.error(f"Failed to load Vision Model: {str(e)}")
+            logger.error(f"Failed to load Vision Model: {str(e)}\n\n{traceback.format_exc()}")
             raise
 
     def generate_answer(self, history, image_input=None):
@@ -92,8 +93,8 @@ class VisionModelHandler:
             
             return generated_text.strip()
         except Exception as e:
-            logger.error(f"Error during answer generation: {str(e)}")
-            return f"Error during answer generation: {str(e)}"
+            logger.error(f"Error during answer generation: {str(e)}\n\n{traceback.format_exc()}")
+            return f"Error during answer generation: {str(e)}\n\n{traceback.format_exc()}"
 
     def get_terminators(self):
         return [

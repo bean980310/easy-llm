@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 from PIL import Image
 from threading import Thread
+import traceback
 import torch
 import gradio as gr
 from transformers import (
@@ -14,13 +15,16 @@ from huggingface_hub import snapshot_download
 import openai
 import logging
 from logging.handlers import RotatingFileHandler
-from model_handlers import MiniCPMLlama3V25Handler, GLM4VHandler, VisionModelHandler
+from model_handlers import (
+    MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
+    Aya23Handler
+)
 from utils import (
     make_local_dir_name,
     scan_local_models,
     remove_hf_cache,
     download_model_from_hf,
-    ensure_model_available
+    ensure_model_available,
 )
 ##########################################
 # 1) 유틸 함수들
@@ -126,11 +130,19 @@ def clear_all_model_cache():
 ##########################################
 
 def get_terminators(tokenizer):
-    return [
-        tokenizer.convert_tokens_to_ids("<|end_of_text|>"),
-        tokenizer.convert_tokens_to_ids("<|eot_id|>")
-    ]
-
+    """
+    모델별 종료 토큰 ID를 반환하는 함수
+    """
+    if "glm" in str(tokenizer.__class__).lower():
+        # GLM 모델용 특수 처리
+        return [tokenizer.eos_token_id]  # GLM의 EOS 토큰 사용
+    else:
+        # 기존 다른 모델들을 위한 처리
+        return [
+            tokenizer.convert_tokens_to_ids("<|end_of_text|>"),
+            tokenizer.convert_tokens_to_ids("<|eot_id|>"),
+            tokenizer.eos_token_id if hasattr(tokenizer, 'eos_token_id') else None
+        ]
 # app.py
 
 def load_model(model_id, local_model_path=None, api_key=None):
@@ -163,6 +175,20 @@ def load_model(model_id, local_model_path=None, api_key=None):
         handler = GLM4VHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
         models_cache[model_id] = handler
         return handler
+    elif model_id == "THUDM/glm-4-9b-chat":
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = GLM4Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
+    elif model_id == "CohereForAI/aya-23-8B":
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = Aya23Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
     else:
         # 기존 로직 유지
         logger.info(f"[*] Loading model: {model_id}")
@@ -188,7 +214,7 @@ def load_model(model_id, local_model_path=None, api_key=None):
             logger.info(f"[*] 모델 로드 완료: {model_id}")
             return models_cache[model_id]
         except Exception as e:
-            logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+            logger.error(f"모델 로드 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
             return None
 
 # app.py
@@ -220,8 +246,8 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             logger.info(f"[*] OpenAI 응답: {answer}")
             return answer
         except Exception as e:
-            logger.error(f"OpenAI API 오류: {str(e)}")
-            return f"오류 발생: {str(e)}"
+            logger.error(f"OpenAI API 오류: {str(e)}\n\n{traceback.format_exc()}")
+            return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
     
     elif selected_model in [
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
@@ -250,7 +276,9 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             return "모델 핸들러가 로드되지 않았습니다."
         
         logger.info(f"[*] Generating answer using MiniCPMLlama3V25Handler")
-        answer = handler.generate_answer(history)
+        # image_input 파라미터 전달 추가
+        logger.info(f"[*] Image input provided: {image_input is not None}")
+        answer = handler.generate_answer(history, image_input=image_input)
         return answer
     
     elif selected_model == "THUDM/glm-4v-9b":
@@ -264,6 +292,32 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             return "모델 핸들러가 로드되지 않았습니다."
 
         logger.info(f"[*] Generating answer using GLM4VHandler")
+        answer = handler.generate_answer(history)
+        return answer
+    elif selected_model == "THUDM/glm-4-9b-chat":
+        handler: GLM4Handler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
+
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
+
+        logger.info(f"[*] Generating answer using GLM4Handler")
+        answer = handler.generate_answer(history)
+        return answer
+    elif selected_model == "CohereForAI/aya-23-8B":
+        handler = Aya23Handler=models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
+
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
+        
+        logger.info(f"[*] Generating answer using Aya23Handler")
         answer = handler.generate_answer(history)
         return answer
     else:
@@ -291,8 +345,8 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             ).to(model.device)
             logger.info("[*] 입력 템플릿 적용 완료")
         except Exception as e:
-            logger.error(f"입력 템플릿 적용 중 오류 발생: {str(e)}")
-            return f"입력 템플릿 적용 중 오류 발생: {str(e)}"
+            logger.error(f"입력 템플릿 적용 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
+            return f"입력 템플릿 적용 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
 
         try:
             outputs = model.generate(
@@ -305,8 +359,8 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             )
             logger.info("[*] 모델 생성 완료")
         except Exception as e:
-            logger.error(f"모델 생성 중 오류 발생: {str(e)}")
-            return f"모델 생성 중 오류 발생: {str(e)}"
+            logger.error(f"모델 생성 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
+            return f"모델 생성 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
 
         try:
             generated_text = tokenizer.decode(
@@ -315,8 +369,8 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
             )
             logger.info(f"[*] 생성된 텍스트: {generated_text}")
         except Exception as e:
-            logger.error(f"출력 디코딩 중 오류 발생: {str(e)}")
-            return f"출력 디코딩 중 오류 발생: {str(e)}"
+            logger.error(f"출력 디코딩 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
+            return f"출력 디코딩 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
         
         return generated_text.strip()
 
@@ -334,6 +388,8 @@ with gr.Blocks() as demo:
         "Bllossom/llama-3.2-Korean-Bllossom-3B",
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
         "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
+        "THUDM/glm-4-9b-chat",
+        "THUDM/glm-4-9b-chat-1m",
         "THUDM/glm-4v-9b",
         "huggyllama/llama-7b",
         "OrionStarAI/Orion-14B-Base",
@@ -376,9 +432,21 @@ with gr.Blocks() as demo:
             with gr.Row():
                 image_input = gr.Image(label="이미지 업로드 (선택)", type="pil", visible=False)  # 초기 상태 숨김
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")  # 'type' 파라미터 설정
-            msg = gr.Textbox(label="메시지 입력")
-        send_btn = gr.Button("보내기")
+            with gr.Row():
+                msg = gr.Textbox(
+                    label="메시지 입력",
+                    placeholder="메시지를 입력하세요...",
+                    scale=9  # 90% 차지
+                )
+                send_btn = gr.Button(
+                    "전송",
+                    scale=1,  # 10% 차지
+                    variant="primary"
+                )
+            with gr.Row():
+                status_text = gr.Markdown("", elem_id="status_text")
         history_state = gr.State([])
+        
 
         def toggle_api_key_display(selected_model):
             """
@@ -417,94 +485,248 @@ with gr.Blocks() as demo:
         )
         def user_message(user_input, history):
             if not user_input.strip():
-                return "", history
-                # 사용자 메시지 추가
+                return "", history, ""
             history = history + [{"role": "user", "content": user_input}]
-            return "", history
+            return "", history, "🤔 답변을 생성하는 중입니다..."
 
         def bot_message(history, selected_model, local_model_path, image, api_key):
             try:
                 answer = generate_answer(history, selected_model, local_model_path, image, api_key)
             except Exception as e:
-                answer = f"오류 발생: {str(e)}"
-            # 봇 응답 추가
+                answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
             history = history + [{"role": "assistant", "content": answer}]
-            return history
+            return history, ""  # 로딩 상태 제거
 
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,
             inputs=[msg, history_state],
-            outputs=[msg, history_state]
+            outputs=[msg, history_state, status_text],
+            queue=False  # 사용자 입력은 즉시 처리
         ).then(
             fn=bot_message,
             inputs=[history_state, model_dropdown, local_path_text, image_input, api_key_text],
-            outputs=history_state
+            outputs=[history_state, status_text],
+            queue=True  # 모델 생성은 큐에서 처리
         ).then(
             fn=lambda h: h,
             inputs=history_state,
-            outputs=chatbot
+            outputs=chatbot,
+            queue=False  # UI 업데이트는 즉시 처리
         )
-
         send_btn.click(
             fn=user_message,
             inputs=[msg, history_state],
-            outputs=[msg, history_state]
+            outputs=[msg, history_state, status_text],
+            queue=False
         ).then(
             fn=bot_message,
             inputs=[history_state, model_dropdown, local_path_text, image_input, api_key_text],
-            outputs=history_state
+            outputs=[history_state, status_text],
+            queue=True
         ).then(
             fn=lambda h: h,
             inputs=history_state,
-            outputs=chatbot
-        )
-    with gr.Tab("다운로드"):
-        gr.Markdown("### 모델 다운로드")
-        download_mode = gr.Radio(
-            label="다운로드 모드 선택",
-            choices=["Predefined", "Custom Repo ID"],
-            value="Predefined"
-        )
-        with gr.Column():
-            with gr.Row():
-                predefined_dropdown = gr.Dropdown(
-                    label="Predefined Model",
-                    choices=known_hf_models,
-                    value=known_hf_models[0],
-                )
-                custom_repo_id_box = gr.Textbox(label="Custom Repo ID", placeholder="예) Bllossom/llama-3.2-Korean-Bllossom-3B")
-            download_btn = gr.Button("모델 다운로드")
-            download_info = gr.Textbox(label="다운로드 결과", interactive=False)
-
-        def download_and_update(mode, predefined_choice, custom_repo):
-            """
-            1) 모델 다운로드
-            2) 모델 목록 자동 새로고침
-            """
-            if mode == "Predefined":
-                repo_id = predefined_choice
-            else:
-                repo_id = custom_repo.strip()
-            local_name = make_local_dir_name(repo_id)
-            target_dir = os.path.join(LOCAL_MODELS_ROOT, local_name)
-            msg1 = download_model_from_hf(repo_id.strip(), target_dir)
-            # 다운로드 후, 모델 목록도 자동 갱신
-            new_local_models = scan_local_models()
-            new_choices = known_hf_models + new_local_models + ["Local (Custom Path)"]
-            new_choices = list(dict.fromkeys(new_choices))
-            # DropDown update + 결과 메시지
-            return (
-                gr.update(choices=new_choices),  # DropDown 갱신
-                f"{msg1}\n[Auto-Refresh] 모델 목록을 업데이트했습니다."
-            )
-
-        download_btn.click(
-            fn=download_and_update,
-            inputs=[download_mode, predefined_dropdown, custom_repo_id_box],
-            outputs=[model_dropdown, download_info],
+            outputs=chatbot,
             queue=False
         )
+    with gr.Tab("다운로드"):
+        gr.Markdown("""### 모델 다운로드
+        HuggingFace에서 모델을 다운로드하고 로컬에 저장합니다. 
+        미리 정의된 모델 목록에서 선택하거나, 커스텀 모델 ID를 직접 입력할 수 있습니다.""")
+        
+        with gr.Column():
+            # 다운로드 모드 선택 (라디오 버튼을 세그먼트로 변경)
+            download_mode = gr.Radio(
+                label="다운로드 방식 선택",
+                choices=["Predefined", "Custom Repo ID"],
+                value="Predefined",
+                container=True,
+            )
+            
+            # 모델 선택/입력 영역
+            with gr.Column(visible=True) as predefined_column:
+                predefined_dropdown = gr.Dropdown(
+                    label="모델 선택",
+                    choices=sorted(known_hf_models),
+                    value=known_hf_models[0] if known_hf_models else None,
+                    info="지원되는 모델 목록입니다."
+                )
+                
+            with gr.Column(visible=False) as custom_column:
+                custom_repo_id_box = gr.Textbox(
+                    label="Custom Model ID",
+                    placeholder="예) facebook/opt-350m",
+                    info="HuggingFace의 모델 ID를 입력하세요 (예: organization/model-name)"
+                )
+                
+            # 다운로드 설정
+            with gr.Row():
+                with gr.Column(scale=2):
+                    target_path = gr.Textbox(
+                        label="저장 경로",
+                        placeholder="./models/my-model",
+                        value="",
+                        interactive=True,
+                        info="비워두면 자동으로 경로가 생성됩니다."
+                    )
+                with gr.Column(scale=1):
+                    use_auth = gr.Checkbox(
+                        label="인증 필요",
+                        value=False,
+                        info="비공개 또는 gated 모델 다운로드 시 체크"
+                    )
+            
+            with gr.Column(visible=False) as auth_column:
+                hf_token = gr.Textbox(
+                    label="HuggingFace Token",
+                    placeholder="hf_...",
+                    type="password",
+                    info="HuggingFace에서 발급받은 토큰을 입력하세요."
+                )
+            
+            # 다운로드 버튼과 진행 상태
+            with gr.Row():
+                download_btn = gr.Button(
+                    "다운로드 시작",
+                    variant="primary",
+                    scale=2
+                )
+                cancel_btn = gr.Button(
+                    "취소",
+                    variant="stop",
+                    scale=1,
+                    interactive=False
+                )
+                
+            # 상태 표시
+            download_status = gr.Markdown("")
+            progress_bar = gr.Progress(
+                track_tqdm=True,  # tqdm progress bars를 추적
+            )
+            
+            # 다운로드 결과와 로그
+            with gr.Accordion("상세 정보", open=False):
+                download_info = gr.TextArea(
+                    label="다운로드 로그",
+                    interactive=False,
+                    max_lines=10,
+                    autoscroll=True
+                )
+
+        # UI 동작 제어를 위한 함수들
+        def toggle_download_mode(mode):
+            """다운로드 모드에 따라 UI 컴포넌트 표시/숨김"""
+            return [
+                gr.update(visible=(mode == "Predefined")),  # predefined_column
+                gr.update(visible=(mode == "Custom Repo ID"))  # custom_column
+            ]
+
+        def toggle_auth(use_auth_val):
+            """인증 필요 여부에 따라 토큰 입력창 표시/숨김"""
+            return {
+                auth_column: use_auth_val
+            }
+
+        def update_download_ui(
+            status: str = "",
+            btn_enabled: bool = True,
+            cancel_enabled: bool = False,
+            info: str = "",
+            model_list = None
+        ):
+            """UI 업데이트를 위한 헬퍼 함수"""
+            updates = {
+                "download_status": status,
+                "download_btn": gr.Button(interactive=btn_enabled),
+                "cancel_btn": gr.Button(interactive=cancel_enabled),
+                "download_info": info
+            }
+            if model_list is not None:
+                updates["model_dropdown"] = gr.Dropdown(choices=model_list)
+            return updates
+
+        def download_with_progress(mode, predefined_choice, custom_repo, target_dir, use_auth_val, token, progress=gr.Progress()):
+            """진행률 표시와 함께 모델 다운로드 수행"""
+            try:
+                repo_id = predefined_choice if mode == "Predefined" else custom_repo.strip()
+                if not repo_id:
+                    yield (
+                        "❌ 모델 ID를 입력해주세요.",  # status
+                        gr.Button(interactive=True),  # download_btn
+                        gr.Button(interactive=False),  # cancel_btn
+                        "다운로드가 시작되지 않았습니다.",  # download_info
+                        None  # model_dropdown (no update)
+                    )
+                    return
+
+                # 진행 상태 초기화
+                progress(0, desc="준비 중...")
+                yield (
+                    "🔄 다운로드 준비 중...",  # status
+                    gr.Button(interactive=False),  # download_btn
+                    gr.Button(interactive=True),  # cancel_btn
+                    f"모델: {repo_id}\n준비 중...",  # download_info
+                    None  # model_dropdown (no update)
+                )
+
+                # 실제 다운로드 수행
+                progress(0.5, desc="다운로드 중...")
+                result = download_model_from_hf(
+                    repo_id,
+                    target_dir or os.path.join("./models", make_local_dir_name(repo_id))
+                )
+
+                # 다운로드 완료 후 UI 업데이트
+                progress(1.0, desc="완료")
+                yield (
+                    "✅ 다운로드 완료!" if "실패" not in result else "❌ 다운로드 실패",  # status
+                    gr.Button(interactive=True),  # download_btn
+                    gr.Button(interactive=False),  # cancel_btn
+                    result,  # download_info
+                    gr.Dropdown(choices=scan_local_models())  # model_dropdown update
+                )
+
+            except Exception as e:
+                yield (
+                    "❌ 오류 발생",  # status
+                    gr.Button(interactive=True),  # download_btn
+                    gr.Button(interactive=False),  # cancel_btn
+                    f"오류: {str(e)}\n\n{traceback.format_exc()}",  # download_info
+                    None  # model_dropdown (no update)
+                )
+        # 이벤트 연결
+        download_mode.change(
+            fn=toggle_download_mode,
+            inputs=download_mode,
+            outputs=[predefined_column, custom_column]
+        )
+        
+        use_auth.change(
+            fn=toggle_auth,
+            inputs=use_auth,
+            outputs=[auth_column]
+        )
+        
+        download_btn.click(
+            fn=download_with_progress,
+            inputs=[
+                download_mode,
+                predefined_dropdown,
+                custom_repo_id_box,
+                target_path,
+                use_auth,
+                hf_token
+            ],
+            outputs=[
+                download_status,
+                download_btn,
+                cancel_btn,
+                download_info,
+                model_dropdown
+            ]
+        )
+        
     with gr.Tab("캐시"):
         with gr.Row():
             with gr.Column():

@@ -1,10 +1,10 @@
-# model_handlers/glm4v_handler.py
+
+# model_handlers/glm4_handler.py
 
 import torch
 import logging
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria, StoppingCriteriaList
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class StopOnTokens(StoppingCriteria):
                 return True
         return False
 
-class GLM4VHandler:
+class GLM4Handler:
     def __init__(self, model_dir):
         self.model_dir = model_dir
         self.tokenizer = None
@@ -45,7 +45,7 @@ class GLM4VHandler:
             ).eval()
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
-            logger.error(f"Failed to load GLM4V Model: {str(e)}\n\n{traceback.format_exc()}")
+            logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")
             raise
 
     def get_stopping_criteria(self):
@@ -57,15 +57,10 @@ class GLM4VHandler:
         ]
         return StoppingCriteriaList([StopOnTokens(stop_token_ids)])
 
-    def generate_answer(self, history, image_input=None):
+    def generate_answer(self, history):
         try:
-            # 이미지 처리가 필요한 경우 여기에 추가
-            if image_input:
-                image = Image.open(image_input).convert('RGB')
-            else:
-                image = None
             # 메시지 처리
-            prompt_messages = [{"role": msg['role'], "image": msg['image'], "content": msg['content']} for msg in history]
+            prompt_messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
             logger.info(f"[*] Prompt messages for GLM: {prompt_messages}")
             
             # 입력 처리
@@ -79,22 +74,10 @@ class GLM4VHandler:
             logger.info("[*] GLM input template applied successfully")
             
             # 생성 설정
-            generation_config = {
-                "max_new_tokens": 1024,
-                "do_sample": True,
-                "temperature": 0.6,
-                "top_p": 0.8,
-                "repetition_penalty": 1.2,
-                "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id,
-                "stopping_criteria": self.get_stopping_criteria()
-            }
+            generation_config = {"max_length": 2500, "do_sample": True, "top_k": 1}
             
             # 텍스트 생성
-            outputs = self.model.generate(
-                **inputs,
-                **generation_config
-            )
+            outputs = self.model.generate(**inputs,**generation_config)
             logger.info("[*] GLM model generated the response")
             
             # 결과 처리
@@ -110,3 +93,6 @@ class GLM4VHandler:
             error_msg = f"Error during GLM answer generation: {str(e)}\n\n{traceback.format_exc()}"
             logger.error(error_msg)
             return error_msg
+        
+def get_terminators(tokenizer):
+    return [tokenizer.eos_token_id]  # GLM의 EOS 토큰 사용

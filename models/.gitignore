@@ -3,3 +3,6 @@
 *.model
 *.py
 assets/
+*.ipynb
+*.png
+*.jpg
