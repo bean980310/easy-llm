@@ -1,28 +1,19 @@
 import os
 import shutil
-from pathlib import Path
-from PIL import Image
-from threading import Thread
 import traceback
 import torch
 import gradio as gr
-from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, AutoModel, AutoProcessor,
-    MllamaForConditionalGeneration,
-    TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
-)
-from huggingface_hub import snapshot_download
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import openai
 import logging
 from logging.handlers import RotatingFileHandler
 from model_handlers import (
     MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
-    Aya23Handler
+    Aya23Handler, GLM4HfHandler
 )
 from utils import (
     make_local_dir_name,
     scan_local_models,
-    remove_hf_cache,
     download_model_from_hf,
     ensure_model_available,
 )
@@ -57,17 +48,6 @@ logger.addHandler(rotating_file_handler)
 # 메모리 상에 로드된 모델들을 저장하는 캐시
 LOCAL_MODELS_ROOT = "./models"
 models_cache = {}
-
-class StopOnTokens(StoppingCriteria):
-    def __init__(self, stop_ids):
-        super().__init__()
-        self.stop_ids = stop_ids
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        # 마지막 생성된 토큰이 stop_ids에 있는지 확인
-        if input_ids[0][-1] in self.stop_ids:
-            return True
-        return False
 
 def build_model_cache_key(model_id: str, local_path: str = None) -> str:
     """
@@ -159,7 +139,7 @@ def load_model(model_id, local_model_path=None, api_key=None):
         return handler
     elif model_id in [
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-    ] or "vision" in model_id.lower():
+    ] or "vision" in model_id.lower() and model_id != "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B":
         # 모델 존재 확인 및 다운로드
         if not ensure_model_available(model_id, local_model_path):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
@@ -180,6 +160,13 @@ def load_model(model_id, local_model_path=None, api_key=None):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None
         handler = GLM4Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
+    elif model_id in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = GLM4HfHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
         models_cache[model_id] = handler
         return handler
     elif model_id == "CohereForAI/aya-23-8B":
@@ -307,6 +294,19 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         logger.info(f"[*] Generating answer using GLM4Handler")
         answer = handler.generate_answer(history)
         return answer
+    elif selected_model in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+        handler: GLM4HfHandler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
+
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
+
+        logger.info(f"[*] Generating answer using GLM4Handler")
+        answer = handler.generate_answer(history)
+        return answer
     elif selected_model == "CohereForAI/aya-23-8B":
         handler = Aya23Handler=models_cache.get(selected_model)
         if not handler:
@@ -389,7 +389,9 @@ with gr.Blocks() as demo:
         "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
         "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
         "THUDM/glm-4-9b-chat",
+        "THUDM/glm-4-9b-chat-hf",
         "THUDM/glm-4-9b-chat-1m",
+        "THUDM/glm-4-9b-chat-1m-hf",
         "THUDM/glm-4v-9b",
         "huggyllama/llama-7b",
         "OrionStarAI/Orion-14B-Base",
