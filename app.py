@@ -162,7 +162,7 @@ def load_model(model_id, local_model_path=None, api_key=None):
         handler = GLM4Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
         models_cache[model_id] = handler
         return handler
-    elif model_id in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+    elif "glm-4-9b-chat" in model_id and "hf" in model_id:
         if not ensure_model_available(model_id, local_model_path):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None

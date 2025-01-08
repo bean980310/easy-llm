@@ -22,9 +22,21 @@ class Aya23Handler:
             )
             
             logger.info(f"[*] Loading model from {self.model_dir}")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_dir,
-            )
+            if "fp8" in self.model_dir:
+                from transformers import BitsAndBytesConfig
+                quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_dir,
+                    quantization_config=quantization_config,
+                    trust_remote_code=True,
+                    device_map="auto"
+                )
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_dir,
+                    trust_remote_code=True,
+                    device_map="auto"
+                )
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
             logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")
