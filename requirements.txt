@@ -10,3 +10,4 @@ torchaudio
 accelerate
 openai
 tiktoken
+vllm
