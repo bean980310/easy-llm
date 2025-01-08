@@ -185,3 +185,18 @@ def ensure_model_available(model_id: str, local_model_path: str = None) -> bool:
         logger.info(f"[*] 모델 '{model_id}'이(가) 로컬에 없습니다. 다운로드를 시도합니다.")
         success = download_model_from_hf(model_id, target_dir)
         return "실패" not in success
+    
+def get_terminators(tokenizer):
+    """
+    모델별 종료 토큰 ID를 반환하는 함수
+    """
+    if "glm" in str(tokenizer.__class__).lower():
+        # GLM 모델용 특수 처리
+        return [tokenizer.eos_token_id]  # GLM의 EOS 토큰 사용
+    else:
+        # 기존 다른 모델들을 위한 처리
+        return [
+            tokenizer.convert_tokens_to_ids("<|end_of_text|>"),
+            tokenizer.convert_tokens_to_ids("<|eot_id|>"),
+            tokenizer.eos_token_id if hasattr(tokenizer, 'eos_token_id') else None
+        ]

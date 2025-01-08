@@ -11,12 +11,14 @@ from model_handlers import (
     MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
     Aya23Handler, GLM4HfHandler
 )
+from common import load_default_model, generate_default_answer
 from utils import (
     make_local_dir_name,
     scan_local_models,
     download_model_from_hf,
     ensure_model_available,
 )
+from cache import models_cache 
 ##########################################
 # 1) 유틸 함수들
 ##########################################
@@ -47,7 +49,6 @@ logger.addHandler(rotating_file_handler)
 
 # 메모리 상에 로드된 모델들을 저장하는 캐시
 LOCAL_MODELS_ROOT = "./models"
-models_cache = {}
 
 def build_model_cache_key(model_id: str, local_path: str = None) -> str:
     """
@@ -177,32 +178,10 @@ def load_model(model_id, local_model_path=None, api_key=None):
         models_cache[model_id] = handler
         return handler
     else:
-        # 기존 로직 유지
-        logger.info(f"[*] Loading model: {model_id}")
-        local_dirname = make_local_dir_name(model_id)
-        local_dirpath = os.path.join(LOCAL_MODELS_ROOT, local_dirname)
-
-        # 모델 존재 확인 및 다운로드
-        if not ensure_model_available(model_id, local_model_path):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-
-        # 로컬 폴더에서 로드
-        logger.info(f"[*] 로컬 폴더 로드: {local_dirpath}")
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(local_dirpath, trust_remote_code=True)
-            model = AutoModelForCausalLM.from_pretrained(
-                local_dirpath,
-                torch_dtype=torch.bfloat16,
-                device_map="auto",
-                trust_remote_code=True
-            )
-            models_cache[model_id] = {"tokenizer": tokenizer, "model": model}
-            logger.info(f"[*] 모델 로드 완료: {model_id}")
-            return models_cache[model_id]
-        except Exception as e:
-            logger.error(f"모델 로드 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
-            return None
+        # 기존 로직을 common.py의 load_default_model로 대체
+        logger.info(f"[*] Loading default model: {model_id}")
+        handler = load_default_model(model_id, local_model_path=local_model_path)
+        return handler
 
 # app.py
 
@@ -321,58 +300,10 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         answer = handler.generate_answer(history)
         return answer
     else:
-        # 다른 모델 처리
-        handler = load_model(selected_model, local_model_path=local_model_path)
-        if not handler:
-            return "모델 로드에 실패했습니다."
-
-        # 기존 로직
-        tokenizer = handler.get("tokenizer")
-        model = handler.get("model")
-        if not tokenizer or not model:
-            logger.error("토크나이저 또는 모델이 로드되지 않았습니다.")
-            return "토크나이저 또는 모델이 로드되지 않았습니다."
-
-        terminators = get_terminators(tokenizer)
-        prompt_messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
-        logger.info(f"[*] Prompt messages for other models: {prompt_messages}")
-        
-        try:
-            input_ids = tokenizer.apply_chat_template(
-                prompt_messages,
-                add_generation_prompt=True,
-                return_tensors="pt"
-            ).to(model.device)
-            logger.info("[*] 입력 템플릿 적용 완료")
-        except Exception as e:
-            logger.error(f"입력 템플릿 적용 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
-            return f"입력 템플릿 적용 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-
-        try:
-            outputs = model.generate(
-                input_ids,
-                max_new_tokens=1024,
-                eos_token_id=terminators,
-                do_sample=True,
-                temperature=0.6,
-                top_p=0.9
-            )
-            logger.info("[*] 모델 생성 완료")
-        except Exception as e:
-            logger.error(f"모델 생성 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
-            return f"모델 생성 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-
-        try:
-            generated_text = tokenizer.decode(
-                outputs[0][input_ids.shape[-1]:],
-                skip_special_tokens=True
-            )
-            logger.info(f"[*] 생성된 텍스트: {generated_text}")
-        except Exception as e:
-            logger.error(f"출력 디코딩 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
-            return f"출력 디코딩 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-        
-        return generated_text.strip()
+        # 기존 로직을 common.py의 generate_default_answer로 대체
+        logger.info(f"[*] Generating answer using default handler for model: {selected_model}")
+        answer = generate_default_answer(history, selected_model, local_model_path=local_model_path)
+        return answer
 
 ##########################################
 # 3) Gradio UI
