@@ -4,6 +4,7 @@ from .llama3_2_vision import VisionModelHandler
 from .glm_4 import GLM4Handler
 from .aya_23 import Aya23Handler
 from .glm_4_hf import GLM4HfHandler
+from .other import OtherModelHandler
 
 __all__ = [
     "MiniCPMLlama3V25Handler",
@@ -11,5 +12,6 @@ __all__ = [
     "GLM4VHandler",
     "GLM4Handler",
     "Aya23Handler",
-    "GLM4HfHandler"
+    "GLM4HfHandler",
+    "OtherModelHandler"
 ]

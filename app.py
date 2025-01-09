@@ -9,14 +9,14 @@ import logging
 from logging.handlers import RotatingFileHandler
 from model_handlers import (
     MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
-    Aya23Handler, GLM4HfHandler
+    Aya23Handler, GLM4HfHandler, OtherModelHandler
 )
-from common import load_default_model, generate_default_answer
 from utils import (
     make_local_dir_name,
     scan_local_models,
     download_model_from_hf,
     ensure_model_available,
+    convert_and_save
 )
 from cache import models_cache 
 ##########################################
@@ -163,7 +163,15 @@ def load_model(model_id, local_model_path=None, api_key=None):
         handler = GLM4Handler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
         models_cache[model_id] = handler
         return handler
-    elif "glm-4-9b-chat" in model_id and "hf" in model_id:
+    elif model_id in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = GLM4HfHandler(model_dir=local_model_path or f"./models/{make_local_dir_name(model_id)}")
+        models_cache[model_id] = handler
+        return handler
+    elif model_id in ["bean980310/glm-4-9b-chat-hf_float8", "genai-archive/glm-4-9b-chat-hf_int8"]:
+        # 'fp8' 특화 핸들러 로직 추가
         if not ensure_model_available(model_id, local_model_path):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None
@@ -178,9 +186,11 @@ def load_model(model_id, local_model_path=None, api_key=None):
         models_cache[model_id] = handler
         return handler
     else:
-        # 기존 로직을 common.py의 load_default_model로 대체
-        logger.info(f"[*] Loading default model: {model_id}")
-        handler = load_default_model(model_id, local_model_path=local_model_path)
+        if not ensure_model_available(model_id, local_model_path):
+            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+            return None
+        handler = OtherModelHandler(model_id, local_model_path=local_model_path)
+        models_cache[model_id] = handler
         return handler
 
 # app.py
@@ -273,7 +283,7 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         logger.info(f"[*] Generating answer using GLM4Handler")
         answer = handler.generate_answer(history)
         return answer
-    elif selected_model == "THUDM/glm-4-9b-chat-hf" or selected_model == "THUDM/glm-4-9b-chat-1m-hf":
+    elif selected_model in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf", "bean980310/glm-4-9b-chat-hf_float8", "genai-archive/glm-4-9b-chat-hf_int8"] :
         handler: GLM4HfHandler = models_cache.get(selected_model)
         if not handler:
             logger.info(f"[*] 모델 로드 중: {selected_model}")
@@ -300,9 +310,16 @@ def generate_answer(history, selected_model, local_model_path=None, image_input=
         answer = handler.generate_answer(history)
         return answer
     else:
-        # 기존 로직을 common.py의 generate_default_answer로 대체
+        handler: OtherModelHandler = models_cache.get(selected_model)
+        if not handler:
+            logger.info(f"[*] 모델 로드 중: {selected_model}")
+            handler = load_model(selected_model, local_model_path=local_model_path)
+
+        if not handler:
+            logger.error("모델 핸들러가 로드되지 않았습니다.")
+            return "모델 핸들러가 로드되지 않았습니다."
         logger.info(f"[*] Generating answer using default handler for model: {selected_model}")
-        answer = generate_default_answer(history, selected_model, local_model_path=local_model_path)
+        answer = handler.generate_answer(history)
         return answer
 
 ##########################################
@@ -324,6 +341,7 @@ with gr.Blocks() as demo:
         "THUDM/glm-4-9b-chat-1m",
         "THUDM/glm-4-9b-chat-1m-hf",
         "THUDM/glm-4v-9b",
+        "bean980310/glm-4-9b-chat-hf_float8",
         "huggyllama/llama-7b",
         "OrionStarAI/Orion-14B-Base",
         "OrionStarAI/Orion-14B-Chat",
@@ -659,7 +677,7 @@ with gr.Blocks() as demo:
                 model_dropdown
             ]
         )
-        
+    
     with gr.Tab("캐시"):
         with gr.Row():
             with gr.Column():
@@ -694,5 +712,21 @@ with gr.Blocks() as demo:
             inputs=[],
             outputs=clear_all_result
         )
+    with gr.Tab("유틸리티"):
+        gr.Markdown("### 모델 비트 변환기")
+        gr.Markdown("Transformers와 BitsAndBytes를 사용하여 모델을 8비트로 변환합니다.")
+        
+        with gr.Row():
+            model_id = gr.Textbox(label="HuggingFace 모델 ID", placeholder="예: gpt2")
+            output_dir = gr.Textbox(label="저장 디렉토리", placeholder="./converted_models/gpt2_8bit")
+        with gr.Row():
+            quant_type = gr.Radio(choices=["float8", "int8"], label="변환 유형", value="int8")
+        with gr.Row():
+            push_to_hub = gr.Checkbox(label="Hugging Face Hub에 푸시", value=False)
+        
+        convert_button = gr.Button("모델 변환 시작")
+        output = gr.Textbox(label="결과")
+        
+        convert_button.click(fn=convert_and_save, inputs=[model_id, output_dir, push_to_hub, quant_type], outputs=output)
 
 demo.launch(debug=True, inbrowser=True, server_port=7861)

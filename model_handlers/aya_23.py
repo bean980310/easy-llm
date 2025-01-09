@@ -1,7 +1,7 @@
 import torch
 import logging
 import traceback
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoConfig
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,12 @@ class Aya23Handler:
         self.load_model()
 
     def load_model(self):
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
         try:
             logger.info(f"[*] Loading tokenizer from {self.model_dir}")
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -29,14 +35,13 @@ class Aya23Handler:
                     self.model_dir,
                     quantization_config=quantization_config,
                     trust_remote_code=True,
-                    device_map="auto"
-                )
+                ).to(device)
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_dir,
                     trust_remote_code=True,
                     device_map="auto"
-                )
+                ).to(device)
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
             logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")

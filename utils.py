@@ -5,6 +5,7 @@ import shutil
 import logging
 import asyncio
 import traceback
+import torch
 from pathlib import Path
 from typing import Optional, Callable
 from huggingface_hub import (
@@ -12,6 +13,8 @@ from huggingface_hub import (
     snapshot_download,
     model_info,
 )
+from model_converter import convert_model_to_float8, convert_model_to_int8
+import platform
 
 logger = logging.getLogger(__name__)
 
@@ -200,3 +203,38 @@ def get_terminators(tokenizer):
             tokenizer.convert_tokens_to_ids("<|eot_id|>"),
             tokenizer.eos_token_id if hasattr(tokenizer, 'eos_token_id') else None
         ]
+        
+def convert_and_save(model_id, output_dir, push_to_hub, quant_type):
+    if not model_id:
+        return "모델 ID를 입력해주세요."
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    
+    if quant_type=='float8':
+        if not output_dir:
+            output_dir = f"./models/{model_id.replace('/', '__')}-float8"
+        if platform.system('Darwin'):
+            return "MacOS에서는 float8 변환을 지원하지 않습니다."
+        else:
+            success = convert_model_to_float8(model_id, output_dir, push_to_hub)
+            if success:
+                return f"모델이 성공적으로 8비트로 변환되었습니다: {output_dir}"
+            else:
+                return "모델 변환에 실패했습니다."
+    elif quant_type=='int8':
+        if not output_dir:
+            output_dir = f"./models/{model_id.replace('/', '__')}-int8"
+        success = convert_model_to_int8(model_id, output_dir, push_to_hub)
+        if success:
+            return f"모델이 성공적으로 8비트로 변환되었습니다: {output_dir}"
+        else:
+            return "모델 변환에 실패했습니다."
+    else:
+        return "지원되지 않는 변환 유형입니다."
