@@ -11,3 +11,5 @@ accelerate
 openai
 tiktoken
 vllm
+gguf
+llama-cpp-python
