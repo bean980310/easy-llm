@@ -12,7 +12,9 @@ from huggingface_hub import (
     HfApi, 
     snapshot_download,
     model_info,
+    login
 )
+from llama_cpp import Llama
 from model_converter import convert_model_to_float8, convert_model_to_int8
 import platform
 
@@ -40,13 +42,14 @@ def convert_folder_to_modelid(folder_name: str) -> str:
     """로컬 디렉토리 이름을 HuggingFace 모델 ID로 변환"""
     return folder_name.replace("__", "/")
 
-def scan_local_models(root="./models"):
-    """로컬에 저장된 모델 목록을 스캔"""
+def scan_local_models(root="./models", model_type=None):
+    """로컬에 저장된 모델 목록을 유형별로 스캔"""
     if not os.path.isdir(root):
         os.makedirs(root, exist_ok=True)
 
     local_model_ids = []
-    for subdir in ['transformers', 'gguf', 'mlx']:
+    subdirs = ['transformers', 'gguf', 'mlx'] if not model_type else [model_type]
+    for subdir in subdirs:
         subdir_path = os.path.join(root, subdir)
         if not os.path.isdir(subdir_path):
             continue
@@ -54,10 +57,22 @@ def scan_local_models(root="./models"):
             full_path = os.path.join(subdir_path, folder)
             if os.path.isdir(full_path) and 'config.json' in os.listdir(full_path):
                 model_id = convert_folder_to_modelid(folder)
-                local_model_ids.append(f"{subdir}/{model_id}")
+                local_model_ids.append({"model_id": model_id, "model_type": subdir})
     logger.info(f"Scanned local models: {local_model_ids}")
     return local_model_ids
 
+def get_all_local_models():
+    """모든 모델 유형별 로컬 모델 목록을 가져옴"""
+    models = scan_local_models()  # 모든 유형 스캔
+    transformers = [m["model_id"] for m in models if m["model_type"] == "transformers"]
+    gguf = [m["model_id"] for m in models if m["model_type"] == "gguf"]
+    mlx = [m["model_id"] for m in models if m["model_type"] == "mlx"]
+    return {
+        "transformers": transformers,
+        "gguf": gguf,
+        "mlx": mlx
+    }
+    
 def remove_hf_cache(model_id):
     """HuggingFace 캐시 폴더 제거"""
     if "/" in model_id:
@@ -82,10 +97,15 @@ async def get_model_size(repo_id: str, token: Optional[str] = None) -> int:
     except Exception as e:
         logger.warning(f"모델 크기 계산 실패: {e}")
         return 0
+    
+def get_model_list_from_hf_hub():
+    api=HfApi()
+    api.token = login(new_session=False)
+    api.list_models(sort="lastModified", direction=-1, limit=100)
 
-def download_model_from_hf(hf_repo_id: str, target_dir: str, model_type: str = "transformers") -> str:
+def download_model_from_hf(hf_repo_id: str, target_dir: str, model_type: str = "transformers", quantization_bit: str = None) -> str:
     """
-    동기식 모델 다운로드 (이전 버전과의 호환성 유지)
+    동기식 모델 다운로드
     model_type: "transformers", "gguf", "mlx" 중 선택
     """
     if model_type not in ["transformers", "gguf", "mlx"]:
@@ -102,12 +122,20 @@ def download_model_from_hf(hf_repo_id: str, target_dir: str, model_type: str = "
 
     logger.info(f"[*] 모델 '{hf_repo_id}'을(를) '{target_dir}'에 다운로드 중...")
     try:
-        snapshot_download(
-            repo_id=hf_repo_id,
-            local_dir=target_dir,
-            ignore_patterns=["*.md", ".gitattributes", "original/", "LICENSE.txt", "LICENSE"],
-            local_dir_use_symlinks=False
-        )
+        if model_type=="gguf":
+            Llama.from_pretrained(
+                repo_id=hf_repo_id,
+                filename=f"*{quantization_bit}.gguf",
+                local_dir=target_base_dir,
+                hf=True
+            )
+        else:
+            snapshot_download(
+                repo_id=hf_repo_id,
+                local_dir=target_dir,
+                ignore_patterns=["*.md", ".gitattributes", "original/", "LICENSE.txt", "LICENSE"],
+                local_dir_use_symlinks=False
+            )
         remove_hf_cache(hf_repo_id)
         msg = f"[+] 다운로드 & 저장 완료: {target_dir}"
         logger.info(msg)
@@ -179,26 +207,32 @@ async def download_model_from_hf_async(
         logger.error(f"{error_msg}\n{traceback.format_exc()}")
         raise RuntimeError(error_msg)
 
-def ensure_model_available(model_id: str, local_model_path: str = None) -> bool:
-    """모델이 로컬에 존재하는지 확인하고, 없으면 다운로드"""
-    if model_id == "Local (Custom Path)":
-        if local_model_path and os.path.isdir(local_model_path):
-            logger.info(f"[*] 사용자 지정 경로에서 모델을 찾았습니다: {local_model_path}")
-            return True
-        else:
-            logger.error(f"[!] 지정된 로컬 경로에 모델이 없습니다: {local_model_path}")
-            return False
-
-    local_dirname = make_local_dir_name(model_id)
-    target_dir = os.path.join("./models", local_dirname)
-
-    if os.path.isdir(target_dir) and 'config.json' in os.listdir(target_dir):
-        logger.info(f"[*] 모델 '{model_id}'이(가) 로컬에 이미 존재합니다.")
-        return True
+def ensure_model_available(model_id, local_model_path=None, model_type=None):
+    """
+    모델의 가용성을 확인하고, 필요 시 다운로드합니다.
+    
+    Args:
+        model_id (str): 모델의 ID.
+        local_model_path (str, optional): 모델이 저장된 로컬 경로.
+        model_type (str, optional): 모델 유형 (예: 'transformers', 'gguf', 'mlx').
+    
+    Returns:
+        bool: 모델이 사용 가능하면 True, 아니면 False.
+    """
+    # model_type을 사용하여 모델 경로 결정 또는 다운로드 로직 수정
+    if model_type:
+        model_dir = os.path.join("./models", model_type, make_local_dir_name(model_id))
     else:
-        logger.info(f"[*] 모델 '{model_id}'이(가) 로컬에 없습니다. 다운로드를 시도합니다.")
-        success = download_model_from_hf(model_id, target_dir)
-        return "실패" not in success
+        model_dir = os.path.join("./models", "transformers", make_local_dir_name(model_id))
+    
+    if not os.path.exists(model_dir):
+        try:
+            download_model_from_hf(model_id, model_dir, model_type=model_type)
+            return True
+        except Exception as e:
+            logger.error(f"모델 다운로드 실패: {e}")
+            return False
+    return True
     
 def get_terminators(tokenizer):
     """

@@ -36,15 +36,12 @@ class GLM4HfHandler:
                 self.model=QuantizedAutoModelForCausalLM.from_pretrained(
                     self.model_dir
                 ).to(device)
-            elif "int8" in self.model_dir:
-                self.model=QuantizedAutoModelForCausalLM.from_pretrained(
-                    self.model_dir
-                ).to(device)
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_dir,
                     torch_dtype=torch.bfloat16,
-                ).to(device)
+                    device_map="auto"
+                )
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
             logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")

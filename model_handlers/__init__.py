@@ -5,8 +5,10 @@ from .glm_4 import GLM4Handler
 from .aya_23 import Aya23Handler
 from .glm_4_hf import GLM4HfHandler
 from .other import OtherModelHandler
+from .gguf_handler import GGUFModelHandler
 
 __all__ = [
+    "GGUFModelHandler",
     "MiniCPMLlama3V25Handler",
     "VisionModelHandler",
     "GLM4VHandler",
