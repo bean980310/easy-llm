@@ -50,11 +50,11 @@ logger.addHandler(rotating_file_handler)
 # 메모리 상에 로드된 모델들을 저장하는 캐시
 LOCAL_MODELS_ROOT = "./models"
 
-def build_model_cache_key(model_id: str, local_path: str = None) -> str:
+def build_model_cache_key(model_id: str, model_type: str, local_path: str = None) -> str:
     """
     models_cache에 사용될 key를 구성.
     - 만약 model_id == 'Local (Custom Path)' 이고 local_path가 주어지면 'local::{local_path}'
-    - 그 외에는 'auto::{local_dir}::hf::{model_id}' 형태.
+    - 그 외에는 'auto::{model_type}::{local_dir}::hf::{model_id}' 형태.
     """
     if model_id == "Local (Custom Path)" and local_path:
         return f"local::{local_path}"
@@ -62,8 +62,8 @@ def build_model_cache_key(model_id: str, local_path: str = None) -> str:
         return f"api::{model_id}"
     else:
         local_dirname = make_local_dir_name(model_id)
-        local_dirpath = os.path.join("./models", local_dirname)
-        return f"auto::{local_dirpath}::hf::{model_id}"
+        local_dirpath = os.path.join("./models", model_type, local_dirname)
+        return f"auto::{model_type}::{local_dirpath}::hf::{model_id}"
 
 def clear_model_cache(model_id: str, local_path: str = None) -> str:
     """
@@ -126,10 +126,13 @@ def get_terminators(tokenizer):
         ]
 # app.py
 
-def load_model(model_id, local_model_path=None, api_key=None):
+def load_model(model_id, model_type, local_model_path=None, api_key=None):
     """
     모델 로드 함수. 특정 모델에 대한 로드 로직을 외부 핸들러로 분리.
     """
+    if model_type not in ["transformers", "gguf", "mlx"]:
+        logger.error(f"지원되지 않는 모델 유형: {model_type}")
+        return None
     if model_id == "openbmb/MiniCPM-Llama3-V-2_5":
         # 모델 존재 확인 및 다운로드
         if not ensure_model_available(model_id, local_model_path):
@@ -189,17 +192,17 @@ def load_model(model_id, local_model_path=None, api_key=None):
         if not ensure_model_available(model_id, local_model_path):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None
-        handler = OtherModelHandler(model_id, local_model_path=local_model_path)
+        handler = OtherModelHandler(model_id, local_model_path=local_model_path, model_type=model_type)
         models_cache[model_id] = handler
         return handler
 
 # app.py
 
-def generate_answer(history, selected_model, local_model_path=None, image_input=None, api_key=None):
+def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None):
     """
     사용자 히스토리를 기반으로 답변 생성.
     """
-    cache_key = build_model_cache_key(selected_model, local_model_path)
+    cache_key = build_model_cache_key(selected_model, model_type, local_path=local_model_path)
     model_cache = models_cache.get(cache_key, {})
     
     if "gpt" in selected_model:
@@ -362,6 +365,14 @@ with gr.Blocks() as demo:
         initial_choices = known_hf_models + local_model_folders + ["Local (Custom Path)"]
         initial_choices = list(dict.fromkeys(initial_choices))
 
+        with gr.Row():
+            model_type_dropdown = gr.Radio(
+                label="모델 유형 선택",
+                choices=["transformers", "gguf", "mlx"],
+                value="transformers",
+                inline=True
+            )
+            
         model_dropdown = gr.Dropdown(
             label="모델 선택",
             choices=initial_choices,
@@ -398,7 +409,6 @@ with gr.Blocks() as demo:
                 status_text = gr.Markdown("", elem_id="status_text")
         history_state = gr.State([])
         
-
         def toggle_api_key_display(selected_model):
             """
             OpenAI API Key 입력 필드와 로컬 경로 입력 필드의 가시성을 제어합니다.
@@ -424,7 +434,18 @@ with gr.Blocks() as demo:
             else:
                 return gr.update(visible=False), "이미지 입력이 필요하지 않습니다."
     
-        # 모델 드롭다운 변경 시 함수 연결
+        def update_model_dropdown(model_type, _):
+            """
+            모델 유형에 따라 모델 드롭다운의 선택지를 업데이트합니다.
+            """
+            return scan_local_models(model_type=model_type)
+
+        model_type_dropdown.change(
+            fn=update_model_dropdown,
+            inputs=[model_type_dropdown, model_dropdown],
+            outputs=[model_dropdown]
+        )
+
         model_dropdown.change(
             fn=toggle_api_key_display,
             inputs=[model_dropdown],
@@ -610,6 +631,14 @@ with gr.Blocks() as demo:
                         None  # model_dropdown (no update)
                     )
                     return
+                
+                if "gguf" in repo_id.lower():
+                    model_type = "gguf"
+                elif "mlx" in repo_id.lower():
+                    model_type = "mlx"
+                else:
+                    model_type = "transformers"
+
 
                 # 진행 상태 초기화
                 progress(0, desc="준비 중...")
@@ -625,8 +654,10 @@ with gr.Blocks() as demo:
                 progress(0.5, desc="다운로드 중...")
                 result = download_model_from_hf(
                     repo_id,
-                    target_dir or os.path.join("./models", make_local_dir_name(repo_id))
+                    target_dir or os.path.join("./models", model_type, make_local_dir_name(repo_id)),
+                    model_type=model_type
                 )
+
 
                 # 다운로드 완료 후 UI 업데이트
                 progress(1.0, desc="완료")

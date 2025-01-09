@@ -1,15 +1,16 @@
 # common.py 상단에 추가
+import os
 import torch
 import logging
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from utils import get_terminators
+from utils import get_terminators, make_local_dir_name
 
 logger = logging.getLogger(__name__)
 
 class OtherModelHandler:
-    def __init__(self, model_dir):
-        self.model_dir = model_dir
+    def __init__(self, model_id, local_model_path=None, model_type="transformers"):
+        self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None
         self.model = None
         self.load_model()

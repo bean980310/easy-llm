@@ -1,16 +1,17 @@
 # model_handlers/minicpm_llama3_v2_5.py
-
+import os
 import torch
 from transformers import AutoTokenizer, AutoModel, ProcessorMixin
 import traceback
 import logging
 from PIL import Image
+from utils import make_local_dir_name
 
 logger = logging.getLogger(__name__)
 
 class MiniCPMLlama3V25Handler:
-    def __init__(self, model_dir):
-        self.model_dir = model_dir
+    def __init__(self, model_id, local_model_path=None, model_type="transformers"):
+        self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None
         self.model = None
         self.load_model()

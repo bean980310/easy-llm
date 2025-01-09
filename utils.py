@@ -46,11 +46,15 @@ def scan_local_models(root="./models"):
         os.makedirs(root, exist_ok=True)
 
     local_model_ids = []
-    for folder in os.listdir(root):
-        full_path = os.path.join(root, folder)
-        if os.path.isdir(full_path) and 'config.json' in os.listdir(full_path):
-            model_id = convert_folder_to_modelid(folder)
-            local_model_ids.append(model_id)
+    for subdir in ['transformers', 'gguf', 'mlx']:
+        subdir_path = os.path.join(root, subdir)
+        if not os.path.isdir(subdir_path):
+            continue
+        for folder in os.listdir(subdir_path):
+            full_path = os.path.join(subdir_path, folder)
+            if os.path.isdir(full_path) and 'config.json' in os.listdir(full_path):
+                model_id = convert_folder_to_modelid(folder)
+                local_model_ids.append(f"{subdir}/{model_id}")
     logger.info(f"Scanned local models: {local_model_ids}")
     return local_model_ids
 
@@ -79,16 +83,23 @@ async def get_model_size(repo_id: str, token: Optional[str] = None) -> int:
         logger.warning(f"모델 크기 계산 실패: {e}")
         return 0
 
-def download_model_from_hf(hf_repo_id: str, target_dir: str) -> str:
+def download_model_from_hf(hf_repo_id: str, target_dir: str, model_type: str = "transformers") -> str:
     """
     동기식 모델 다운로드 (이전 버전과의 호환성 유지)
+    model_type: "transformers", "gguf", "mlx" 중 선택
     """
+    if model_type not in ["transformers", "gguf", "mlx"]:
+        model_type = "transformers"  # 기본값 설정
+
+    target_base_dir = os.path.join("./models", model_type)
+    os.makedirs(target_base_dir, exist_ok=True)
+    target_dir = os.path.join(target_base_dir, make_local_dir_name(hf_repo_id))
+
     if os.path.isdir(target_dir):
         msg = f"[*] 이미 다운로드됨: {hf_repo_id} → {target_dir}"
         logger.info(msg)
         return msg
-    
-    os.makedirs(target_dir, exist_ok=True)
+
     logger.info(f"[*] 모델 '{hf_repo_id}'을(를) '{target_dir}'에 다운로드 중...")
     try:
         snapshot_download(
@@ -204,23 +215,17 @@ def get_terminators(tokenizer):
             tokenizer.eos_token_id if hasattr(tokenizer, 'eos_token_id') else None
         ]
         
-def convert_and_save(model_id, output_dir, push_to_hub, quant_type):
+def convert_and_save(model_id, output_dir, push_to_hub, quant_type, model_type="transformers"):
     if not model_id:
         return "모델 ID를 입력해주세요."
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
-    
-    if quant_type=='float8':
+
+    base_output_dir = os.path.join("./models", model_type)
+    os.makedirs(base_output_dir, exist_ok=True)
+
+    if quant_type == 'float8':
         if not output_dir:
-            output_dir = f"./models/{model_id.replace('/', '__')}-float8"
-        if platform.system('Darwin'):
+            output_dir = os.path.join(base_output_dir, f"{model_id.replace('/', '__')}-float8")
+        if platform.system() == 'Darwin':
             return "MacOS에서는 float8 변환을 지원하지 않습니다."
         else:
             success = convert_model_to_float8(model_id, output_dir, push_to_hub)
@@ -228,9 +233,9 @@ def convert_and_save(model_id, output_dir, push_to_hub, quant_type):
                 return f"모델이 성공적으로 8비트로 변환되었습니다: {output_dir}"
             else:
                 return "모델 변환에 실패했습니다."
-    elif quant_type=='int8':
+    elif quant_type == 'int8':
         if not output_dir:
-            output_dir = f"./models/{model_id.replace('/', '__')}-int8"
+            output_dir = os.path.join(base_output_dir, f"{model_id.replace('/', '__')}-int8")
         success = convert_model_to_int8(model_id, output_dir, push_to_hub)
         if success:
             return f"모델이 성공적으로 8비트로 변환되었습니다: {output_dir}"

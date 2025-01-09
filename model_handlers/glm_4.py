@@ -1,10 +1,13 @@
 
 # model_handlers/glm4_handler.py
 
+import os
 import torch
 import logging
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria, StoppingCriteriaList
+
+from utils import make_local_dir_name
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +23,8 @@ class StopOnTokens(StoppingCriteria):
         return False
 
 class GLM4Handler:
-    def __init__(self, model_dir):
-        self.model_dir = model_dir
+    def __init__(self, model_id, local_model_path=None, model_type="transformers"):
+        self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None
         self.model = None
         self.load_model()
