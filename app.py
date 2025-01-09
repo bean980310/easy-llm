@@ -370,7 +370,6 @@ with gr.Blocks() as demo:
                 label="모델 유형 선택",
                 choices=["transformers", "gguf", "mlx"],
                 value="transformers",
-                inline=True
             )
             
         model_dropdown = gr.Dropdown(
