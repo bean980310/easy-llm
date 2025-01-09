@@ -53,7 +53,7 @@ class GLM4HfHandler:
             logger.info(f"[*] Prompt messages for GLM: {prompt_messages}")
             
             inputs = self.tokenizer.apply_chat_template(
-                prompt_messages,
+                conversation=prompt_messages,
                 add_generation_prompt=True, 
                 tokenize=True, 
                 return_tensors="pt",

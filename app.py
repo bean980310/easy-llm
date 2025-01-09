@@ -242,6 +242,13 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
     """
     사용자 히스토리를 기반으로 답변 생성.
     """
+    if not history:
+        system_message = {
+            "role": "system",
+            "content": "당신은 유용한 AI 비서입니다."
+        }
+        history = [system_message]
+    
     cache_key = build_model_cache_key(selected_model, model_type, local_path=local_model_path)
     handler = models_cache.get(cache_key)
     
@@ -430,6 +437,12 @@ with gr.Blocks() as demo:
         def user_message(user_input, history):
             if not user_input.strip():
                 return "", history, ""
+            if not history:
+                system_message = {
+                    "role": "system",
+                    "content": "당신은 유용한 AI 비서입니다."
+                }
+                history = [system_message]
             history = history + [{"role": "user", "content": user_input}]
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
