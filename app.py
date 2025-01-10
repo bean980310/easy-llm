@@ -349,8 +349,8 @@ with gr.Blocks() as demo:
         with gr.Row():
             model_type_dropdown = gr.Radio(
                 label="모델 유형 선택",
-                choices=["transformers", "gguf", "mlx"],
-                value="transformers",
+                choices=["all", "transformers", "gguf", "mlx"],
+                value="all",
             )
         
         model_dropdown = gr.Dropdown(
@@ -417,9 +417,35 @@ with gr.Blocks() as demo:
             inputs=[model_dropdown],
             outputs=[api_key_text, custom_path_text, image_input, image_info]
         )
+        def update_model_list(selected_type):
+            local_models_data = get_all_local_models()
+            transformers_local = local_models_data["transformers"]
+            gguf_local = local_models_data["gguf"]
+            mlx_local = local_models_data["mlx"]
+            
+            # "전체 목록"이면 => API 모델 + 모든 로컬 모델 + "사용자 지정 모델 경로 변경"
+            if selected_type == "all":
+                all_models = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
+                # 중복 제거 후 정렬
+                all_models = sorted(list(dict.fromkeys(all_models)))
+                return gr.update(choices=all_models, value=all_models[0] if all_models else None)
+            
+            # 개별 항목이면 => 해당 유형의 로컬 모델 + "사용자 지정 모델 경로 변경"만
+            if selected_type == "transformers":
+                updated_list = transformers_local + ["사용자 지정 모델 경로 변경"]
+            elif selected_type == "gguf":
+                updated_list = gguf_local + ["사용자 지정 모델 경로 변경"]
+            elif selected_type == "mlx":
+                updated_list = mlx_local + ["사용자 지정 모델 경로 변경"]
+            else:
+                # 혹시 예상치 못한 값이면 transformers로 처리(또는 None)
+                updated_list = transformers_local + ["사용자 지정 모델 경로 변경"]
+            
+            updated_list = sorted(list(dict.fromkeys(updated_list)))
+            return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
         
         model_type_dropdown.change(
-            fn=lambda x: gr.update(choices=get_all_local_models()[x]),
+            fn=update_model_list,
             inputs=[model_type_dropdown],
             outputs=[model_dropdown]
         )
