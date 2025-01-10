@@ -11,7 +11,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from model_handlers import (
     GGUFModelHandler,MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
-    Aya23Handler, GLM4HfHandler, OtherModelHandler
+    Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler
 )
 from huggingface_hub import HfApi, list_models
 from utils import (
@@ -161,96 +161,127 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
         )
         models_cache[build_model_cache_key(model_id, model_type, quantization_bit, local_model_path)] = handler
         return handler
-    if model_id == "openbmb/MiniCPM-Llama3-V-2_5":
-        # 모델 존재 확인 및 다운로드
+    elif model_type == "mlx":
+        # MLX 모델 로딩 로직
         if not ensure_model_available(model_id, local_model_path, model_type):
             logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
             return None
-        handler = MiniCPMLlama3V25Handler(
-            model_id=model_id,
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id in [
-        "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-    ] or ("vision" in model_id.lower() and model_id != "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B"):
-        # 모델 존재 확인 및 다운로드
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = VisionModelHandler(
-            model_id=model_id,
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id == "THUDM/glm-4v-9b":
-        # 모델 존재 확인 및 다운로드
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = GLM4VHandler(
-            model_id=model_id,
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id == "THUDM/glm-4-9b-chat":
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = GLM4Handler(
-            model_id=model_id,
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = GLM4HfHandler(
-            model_id=model_id,  # model_id가 정의되어 있어야 합니다.
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id in ["bean980310/glm-4-9b-chat-hf_float8", "genai-archive/glm-4-9b-chat-hf_int8"]:
-        # 'fp8' 특화 핸들러 로직 추가
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = GLM4HfHandler(
-            model_id=model_id,  # model_id가 정의되어 있어야 합니다.
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
-    elif model_id in ["CohereForAI/aya-23-8B", "CohereForAI/aya-23-35B"]:
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = Aya23Handler(
-            model_id=model_id,  # model_id가 정의되어 있어야 합니다.
-            local_model_path=local_model_path,
-            model_type=model_type
-        )
+        if "vision" in model_id.lower():
+            handler = MlxVisionHandler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+        else:
+            handler = MlxModelHandler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
         models_cache[build_model_cache_key(model_id, model_type)] = handler
         return handler
     else:
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        handler = OtherModelHandler(model_id, local_model_path=local_model_path, model_type=model_type)
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
+        if model_id == "openbmb/MiniCPM-Llama3-V-2_5":
+            # 모델 존재 확인 및 다운로드
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = MiniCPMLlama3V25Handler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id in [
+            "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
+        ] or ("vision" in model_id.lower() and model_id != "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B"):
+            # 모델 존재 확인 및 다운로드
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = VisionModelHandler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id == "THUDM/glm-4v-9b":
+            # 모델 존재 확인 및 다운로드
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = GLM4VHandler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id == "THUDM/glm-4-9b-chat":
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = GLM4Handler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id in ["THUDM/glm-4-9b-chat-hf", "THUDM/glm-4-9b-chat-1m-hf"]:
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = GLM4HfHandler(
+                model_id=model_id,  # model_id가 정의되어 있어야 합니다.
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id in ["bean980310/glm-4-9b-chat-hf_float8", "genai-archive/glm-4-9b-chat-hf_int8"]:
+            # 'fp8' 특화 핸들러 로직 추가
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = GLM4HfHandler(
+                model_id=model_id,  # model_id가 정의되어 있어야 합니다.
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif model_id in ["CohereForAI/aya-23-8B", "CohereForAI/aya-23-35B"]:
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = Aya23Handler(
+                model_id=model_id,  # model_id가 정의되어 있어야 합니다.
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif "qwen" in model_id.lower():
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = QwenHandler(
+                model_id=model_id,  # model_id가 정의되어 있어야 합니다.
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        else:
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = OtherModelHandler(model_id, local_model_path=local_model_path, model_type=model_type)
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
 
 def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None):
     """
@@ -356,6 +387,12 @@ with gr.Blocks() as demo:
     mlx_local = local_models_data["mlx"]
     
     custom_model_path_state = gr.State("")
+    
+    system_message_box = gr.Textbox(
+        label="시스템 메시지",
+        value="당신은 유용한 AI 비서입니다.",
+        placeholder="대화의 성격, 말투 등을 정의하세요."
+    )
         
     with gr.Tab("메인"):
         initial_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
@@ -461,13 +498,13 @@ with gr.Blocks() as demo:
             outputs=[model_dropdown]
         )
         
-        def user_message(user_input, history):
+        def user_message(user_input, history, system_msg):
             if not user_input.strip():
                 return "", history, ""
             if not history:
                 system_message = {
                     "role": "system",
-                    "content": "당신은 유용한 AI 비서입니다."
+                    "content": system_msg
                 }
                 history = [system_message]
             history = history + [{"role": "user", "content": user_input}]
@@ -521,7 +558,7 @@ with gr.Blocks() as demo:
         )
         send_btn.click(
             fn=user_message,
-            inputs=[msg, history_state],
+            inputs=[msg, history_state, system_message_box],
             outputs=[msg, history_state, status_text],
             queue=False
         ).then(
@@ -1023,7 +1060,7 @@ with gr.Blocks() as demo:
             model_id = gr.Textbox(label="HuggingFace 모델 ID", placeholder="예: gpt2")
             output_dir = gr.Textbox(label="저장 디렉토리", placeholder="./converted_models/gpt2_8bit")
         with gr.Row():
-            quant_type = gr.Radio(choices=["float8", "int8"], label="변환 유형", value="int8")
+            quant_type = gr.Radio(choices=["float8", "int8", "int4"], label="변환 유형", value="int8")
         with gr.Row():
             push_to_hub = gr.Checkbox(label="Hugging Face Hub에 푸시", value=False)
         

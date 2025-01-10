@@ -4,13 +4,10 @@ import logging
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoConfig
 
-from optimum.quanto import QuantizedTransformersModel
+from optimum.quanto import QuantizedModelForCausalLM
 from utils import make_local_dir_name
 
 logger = logging.getLogger(__name__)
-
-class QuantizedAutoModelForCausalLM(QuantizedTransformersModel):
-   base_class = AutoModelForCausalLM
 
 class GLM4HfHandler:
     def __init__(self, model_id, local_model_path=None, model_type="transformers"):
@@ -32,8 +29,8 @@ class GLM4HfHandler:
                 self.model_dir
             )
             logger.info(f"[*] Loading model from {self.model_dir}")
-            if "float8" in self.model_dir or "int8" in self.model_dir:
-                self.model=QuantizedAutoModelForCausalLM.from_pretrained(
+            if "float8" in self.model_dir or "int8" in self.model_dir or "int4" in self.model_dir:
+                self.model=QuantizedModelForCausalLM.from_pretrained(
                     self.model_dir
                 ).to(device)
             else:

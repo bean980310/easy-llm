@@ -15,7 +15,7 @@ from huggingface_hub import (
     login
 )
 from llama_cpp import Llama
-from model_converter import convert_model_to_float8, convert_model_to_int8
+from model_converter import convert_model_to_float8, convert_model_to_int8, convert_model_to_int4
 import platform
 
 logger = logging.getLogger(__name__)
@@ -273,6 +273,14 @@ def convert_and_save(model_id, output_dir, push_to_hub, quant_type, model_type="
         success = convert_model_to_int8(model_id, output_dir, push_to_hub)
         if success:
             return f"모델이 성공적으로 8비트로 변환되었습니다: {output_dir}"
+        else:
+            return "모델 변환에 실패했습니다."
+    elif quant_type == 'int4':
+        if not output_dir:
+            output_dir = os.path.join(base_output_dir, f"{model_id.replace('/', '__')}-int8")
+        success = convert_model_to_int4(model_id, output_dir, push_to_hub)
+        if success:
+            return f"모델이 성공적으로 4비트로 변환되었습니다: {output_dir}"
         else:
             return "모델 변환에 실패했습니다."
     else:

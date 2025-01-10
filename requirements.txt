@@ -13,3 +13,5 @@ tiktoken
 vllm
 gguf
 llama-cpp-python
+mlx
+mlx_lm
