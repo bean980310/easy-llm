@@ -26,6 +26,7 @@ from utils import (
 )
 from cache import models_cache 
 
+
 ##########################################
 # 1) 유틸 함수들
 ##########################################
@@ -93,6 +94,19 @@ def clear_model_cache(model_id: str, local_path: str = None) -> str:
         msg = f"[cache] 이미 캐시에 없거나, 로드된 적 없음: {key}"
         logger.info(msg)
         return msg
+
+def refresh_model_list():
+    new_local_models = get_all_local_models()
+    api_models = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4o"]
+    local_models = (
+        new_local_models["transformers"] + 
+        new_local_models["gguf"] + 
+        new_local_models["mlx"]
+    )
+    new_choices = api_models + local_models
+    new_choices = sorted(list(dict.fromkeys(new_choices)))
+    return gr.update(choices=new_choices), "모델 목록을 새로고침했습니다."
+
 
 def clear_all_model_cache():
     """
@@ -341,6 +355,8 @@ with gr.Blocks() as demo:
     gguf_local = local_models_data["gguf"]
     mlx_local = local_models_data["mlx"]
     
+    custom_model_path_state = gr.State("")
+        
     with gr.Tab("메인"):
         initial_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
         initial_choices = list(dict.fromkeys(initial_choices))
@@ -358,12 +374,7 @@ with gr.Blocks() as demo:
             choices=initial_choices,
             value=initial_choices[0] if len(initial_choices) > 0 else None,
         )
-        change_path_btn = gr.Button("사용자 지정 모델 경로 변경")
-        custom_path_text = gr.Textbox(
-            label="사용자 지정 모델 경로",
-            placeholder="./models/custom-model",
-            visible=False
-        )
+        
         api_key_text = gr.Textbox(
             label="OpenAI API Key",
             placeholder="sk-...",
@@ -415,7 +426,7 @@ with gr.Blocks() as demo:
         model_dropdown.change(
             fn=toggle_visibility,
             inputs=[model_dropdown],
-            outputs=[api_key_text, custom_path_text, image_input, image_info]
+            outputs=[api_key_text, image_input, image_info]
         )
         def update_model_list(selected_type):
             local_models_data = get_all_local_models()
@@ -450,16 +461,6 @@ with gr.Blocks() as demo:
             outputs=[model_dropdown]
         )
         
-        # 사용자 지정 모델 경로 변경 버튼 클릭 시
-        def show_custom_path():
-            return gr.update(visible=True)
-        
-        change_path_btn.click(
-            fn=show_custom_path,
-            inputs=[],
-            outputs=[custom_path_text]
-        )
-        
         def user_message(user_input, history):
             if not user_input.strip():
                 return "", history, ""
@@ -474,6 +475,7 @@ with gr.Blocks() as demo:
     
         def bot_message(history, selected_model, custom_path, image, api_key):
             # 모델 유형 결정
+            local_model_path = None
             if selected_model in api_models:
                 model_type = "api"
                 local_model_path = None
@@ -508,7 +510,7 @@ with gr.Blocks() as demo:
             queue=False  # 사용자 입력은 즉시 처리
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, custom_path_text, image_input, api_key_text],
+            inputs=[history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
             outputs=[history_state, status_text],
             queue=True  # 모델 생성은 큐에서 처리
         ).then(
@@ -524,7 +526,7 @@ with gr.Blocks() as demo:
             queue=False
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, custom_path_text, image_input, api_key_text],
+            inputs=[history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
             outputs=[history_state, status_text],
             queue=True
         ).then(
@@ -1029,5 +1031,22 @@ with gr.Blocks() as demo:
         output = gr.Textbox(label="결과")
         
         convert_button.click(fn=convert_and_save, inputs=[model_id, output_dir, push_to_hub, quant_type], outputs=output)
+    with gr.Tab("사용자 지정 모델"):
+        gr.Markdown("### 사용자 지정 모델 경로 설정")
+        custom_path_text = gr.Textbox(
+            label="사용자 지정 모델 경로",
+            placeholder="./models/custom-model",
+        )
+        apply_custom_path_btn = gr.Button("경로 적용")
+
+        # custom_path_text -> custom_model_path_state 저장
+        def update_custom_path(path):
+            return path
+
+        apply_custom_path_btn.click(
+            fn=update_custom_path,
+            inputs=[custom_path_text],
+            outputs=[custom_model_path_state]
+        )
 
 demo.launch(debug=True, inbrowser=True, server_port=7861)
