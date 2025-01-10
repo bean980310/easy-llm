@@ -383,7 +383,6 @@ with gr.Blocks() as demo:
         "THUDM/glm-4-9b-chat-1m",
         "THUDM/glm-4-9b-chat-1m-hf",
         "THUDM/glm-4v-9b",
-        "bean980310/glm-4-9b-chat-hf_float8",
         "huggyllama/llama-7b",
         "OrionStarAI/Orion-14B-Base",
         "OrionStarAI/Orion-14B-Chat",
