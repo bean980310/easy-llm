@@ -11,7 +11,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from model_handlers import (
     GGUFModelHandler,MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
-    Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler
+    Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler, MlxQwenHandler
 )
 from huggingface_hub import HfApi, list_models
 from utils import (
@@ -163,23 +163,39 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
         return handler
     elif model_type == "mlx":
         # MLX 모델 로딩 로직
-        if not ensure_model_available(model_id, local_model_path, model_type):
-            logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-            return None
-        if "vision" in model_id.lower():
+        if model_id in ["Qwen/Qwen2-7B-Instruct-MLX", "mlx-community/Qwen2.5-7B-Instruct-4bit"]:
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
+            handler = MlxQwenHandler(
+                model_id=model_id,
+                local_model_path=local_model_path,
+                model_type=model_type
+            )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
+        elif "vision" in model_id.lower():
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
             handler = MlxVisionHandler(
                 model_id=model_id,
                 local_model_path=local_model_path,
                 model_type=model_type
             )
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
         else:
+            if not ensure_model_available(model_id, local_model_path, model_type):
+                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
+                return None
             handler = MlxModelHandler(
                 model_id=model_id,
                 local_model_path=local_model_path,
                 model_type=model_type
             )
-        models_cache[build_model_cache_key(model_id, model_type)] = handler
-        return handler
+            models_cache[build_model_cache_key(model_id, model_type)] = handler
+            return handler
     else:
         if model_id == "openbmb/MiniCPM-Llama3-V-2_5":
             # 모델 존재 확인 및 다운로드
@@ -443,9 +459,9 @@ with gr.Blocks() as demo:
             OpenAI API Key 입력 필드와 사용자 지정 모델 경로 입력 필드의 가시성을 제어합니다.
             """
             api_visible = selected_model in api_models
-            custom_path_visible = selected_model == "사용자 지정 모델 경로 변경"
             image_visible = (
                 "vision" in selected_model.lower() or
+                "Vision" in selected_model or
                 selected_model in [
                     "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
                     "THUDM/glm-4v-9b",
@@ -454,9 +470,7 @@ with gr.Blocks() as demo:
             )
             return (
                 gr.update(visible=api_visible),
-                gr.update(visible=custom_path_visible),
-                gr.update(visible=image_visible),
-                "이미지를 업로드해주세요." if image_visible else "이미지 입력이 필요하지 않습니다."
+                gr.update(visible=image_visible)
             )
         
         # 모델 선택 변경 시 가시성 토글
@@ -539,22 +553,33 @@ with gr.Blocks() as demo:
             history = history + [{"role": "assistant", "content": answer}]
             return history, ""  # 로딩 상태 제거
     
+
+        def filter_messages_for_chatbot(history):
+            """system 메시지는 제외하고 user/assistant만 Chatbot으로 보냄"""
+            messages_for_chatbot = []
+            for msg in history:
+                if msg["role"] in ("user", "assistant"):
+                    # content가 None이면 빈 문자열이라도 넣어줌
+                    content = msg["content"] if msg["content"] is not None else ""
+                    messages_for_chatbot.append({"role": msg["role"], "content": content})
+            return messages_for_chatbot
+
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,
-            inputs=[msg, history_state],
+            inputs=[msg, history_state, system_message_box],  # 세 번째 파라미터 추가
             outputs=[msg, history_state, status_text],
-            queue=False  # 사용자 입력은 즉시 처리
+            queue=False
         ).then(
             fn=bot_message,
             inputs=[history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
             outputs=[history_state, status_text],
-            queue=True  # 모델 생성은 큐에서 처리
+            queue=True
         ).then(
             fn=lambda h: h,
             inputs=history_state,
             outputs=chatbot,
-            queue=False  # UI 업데이트는 즉시 처리
+            queue=False
         )
         send_btn.click(
             fn=user_message,
@@ -567,9 +592,9 @@ with gr.Blocks() as demo:
             outputs=[history_state, status_text],
             queue=True
         ).then(
-            fn=lambda h: h,
-            inputs=history_state,
-            outputs=chatbot,
+            fn=filter_messages_for_chatbot,            # 추가된 부분
+            inputs=[history_state],
+            outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
         )
     

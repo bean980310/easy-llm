@@ -22,37 +22,27 @@ class MlxVisionHandler:
         self.config = load_config(self.model_dir)
         
     def generate_answer(self, history, *image_inputs):
-        prompt=self.history_to_prompt(history)
+        # 1) prompt 문자열 생성 대신 history 그대로 사용
+        # prompt = self.history_to_prompt(history)  # 주석 처리 혹은 삭제
         
         if image_inputs:
-            images=image_inputs
-            formatted_prompt=apply_chat_template(
-                self.processor, self.config, prompt, num_images=len(images)
+            images = image_inputs
+            # 2) 'prompt' 대신 'conversation=history' 형태로 전달
+            formatted_prompt = apply_chat_template(
+                processor=self.processor,
+                config=self.config,
+                conversation=history,   # <-- history 자체를 전달
+                num_images=len(images)
             )
-            
             output = generate(self.model, self.processor, formatted_prompt, images, verbose=False)
             return output
         else:
-            images=None
-            formatted_prompt=apply_chat_template(
-                self.processor, self.config, prompt, num_images=len(images)
+            images = None
+            formatted_prompt = apply_chat_template(
+                processor=self.processor,
+                config=self.config,
+                conversation=history,   # <-- history 자체를 전달
+                num_images=len(images)
             )
             output = generate(self.model, self.processor, formatted_prompt, images=None, verbose=False)
             return output
-    
-    def history_to_prompt(self, history):
-        """
-        대화 히스토리를 프롬프트로 변환
-        """
-        prompt = ""
-        for message in history:
-            role = message["role"]
-            content = message["content"]
-            if role == "system":
-                prompt += f"System: {content}\n"
-            elif role == "user":
-                prompt += f"User: {content}\n"
-            elif role == "assistant":
-                prompt += f"Assistant: {content}\n"
-        prompt += "Assistant:"
-        return prompt

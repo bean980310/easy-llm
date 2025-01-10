@@ -9,6 +9,7 @@ from .other import OtherModelHandler
 from .gguf_handler import GGUFModelHandler
 from .mlx_handler import MlxModelHandler
 from .mlx_vision import MlxVisionHandler
+from .mlx_qwen import MlxQwenHandler
 
 __all__ = [
     "GGUFModelHandler",
@@ -21,5 +22,6 @@ __all__ = [
     "OtherModelHandler",
     "QwenHandler",
     "MlxModelHandler",
-    "MlxVisionHandler"
+    "MlxVisionHandler",
+    "MlxQwenHandler"
 ]
