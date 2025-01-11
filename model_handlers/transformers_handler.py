@@ -9,7 +9,7 @@ from utils import make_local_dir_name
 
 logger = logging.getLogger(__name__)
 
-class QwenHandler:
+class TransformersModelHandler:
     def __init__(self, model_id, local_model_path=None, model_type="transformers", device="cpu"):
         self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None

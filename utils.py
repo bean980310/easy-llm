@@ -209,17 +209,9 @@ async def download_model_from_hf_async(
         logger.error(f"{error_msg}\n{traceback.format_exc()}")
         raise RuntimeError(error_msg)
 
-def ensure_model_available(model_id, local_model_path=None, model_type=None):
+def ensure_model_available(model_id, local_model_path=None,model_type: str = "transformers") -> bool:
     """
-    모델의 가용성을 확인하고, 필요 시 다운로드합니다.
-    
-    Args:
-        model_id (str): 모델의 ID.
-        local_model_path (str, optional): 모델이 저장된 로컬 경로.
-        model_type (str, optional): 모델 유형 (예: 'transformers', 'gguf', 'mlx').
-    
-    Returns:
-        bool: 모델이 사용 가능하면 True, 아니면 False.
+    모델이 로컬에 존재하는지 확인하고, 없으면 다운로드합니다.
     """
     # model_type을 사용하여 모델 경로 결정 또는 다운로드 로직 수정
     if model_type:
