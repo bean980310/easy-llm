@@ -18,8 +18,7 @@ import openai
 
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.llms import OpenAI, LlamaCpp, Ollama, HuggingFacePipeline
-from langchain.llms.base import Runnable
+from langchain_community.llms import OpenAI, LlamaCpp, Ollama, HuggingFacePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -349,8 +348,9 @@ def generate_stable_diffusion_prompt_cached(user_input, selected_model, model_ty
             return "❌ 지원되지 않는 모델 유형입니다."
         
         # LLMChain 생성
-        if not isinstance(llm, Runnable):
-            return "❌ LLM 인스턴스가 Runnable이 아닙니다."
+        # Runnable 인스턴스 확인 대신, LLMChain이 올바르게 초기화되는지 확인
+        if not llm:
+            return "❌ LLM 인스턴스가 초기화되지 않았습니다."
         
         chain = LLMChain(llm=llm, prompt=template)
         prompt = chain.run(description=user_input)
