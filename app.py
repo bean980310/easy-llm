@@ -62,7 +62,7 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
-# 이미지 파일을 Base64로 인코딩
+# 이미지 파일을 Base64로 인코딩 (별도로 처리)
 def encode_image_to_base64(image_path):
     try:
         with open(image_path, "rb") as image_file:
@@ -88,7 +88,7 @@ DEFAULT_SYSTEM_MESSAGE="""
     거주지: 유저의 모니터 속
     구사가능 언어: 한국어, 영어, 일본어, 중국어
     성격
-    - 보이시하면서도 털털한 성격.
+    - 보이시면서도 털털한 성격.
     - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
     - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
     외형적 특징
@@ -161,11 +161,8 @@ def bot_message(session_id, history, device, seed, model_type):  # async 제거
         # async/await 제거하고 동기 호출로 변경
         answer = generate_answer(history, model_type, None, None, None, device, seed)
         
-        if encoded_character_image:
-            image_markdown = f"![character](data:image/png;base64,{encoded_character_image})"
-            answer_with_image = f"{image_markdown}\n{answer}"
-        else:
-            answer_with_image = answer
+        # 이미지를 응답에 포함시키지 않음
+        answer_with_image = answer
             
     except MemoryError:
         logger.critical("메모리 부족 오류 발생")
@@ -220,6 +217,8 @@ with gr.Blocks(css="""
     align-items: center;
 }
 #chatbot .message.assistant .message-content img {
+    width: 50px;
+    height: 50px;
     margin-right: 10px;
 }
 """) as demo:
@@ -253,11 +252,20 @@ with gr.Blocks(css="""
             interactive=False
         )
         
-        chatbot = gr.Chatbot(
-            height=400,
-            label="Chatbot",
-            elem_id="chatbot"
-        )
+        with gr.Row():
+            chatbot = gr.Chatbot(
+                height=400,
+                label="Chatbot",
+                elem_id="chatbot"
+            )
+            # 프로필 이미지를 표시할 Image 컴포넌트 추가
+            profile_image = gr.Image(
+                value=character_image_path,
+                label="프로필 이미지",
+                visible=True,
+                tool=False,
+                interactive=False
+            )
         
         with gr.Row():
             msg = gr.Textbox(
@@ -330,11 +338,8 @@ with gr.Blocks(css="""
                     seed=seed_val
                 )
                 
-                if encoded_character_image:
-                    image_markdown = f"![character](data:image/png;base64,{encoded_character_image})"
-                    answer_with_image = f"{image_markdown}\n{answer}"
-                else:
-                    answer_with_image = answer
+                # 이미지를 응답에 포함시키지 않음
+                answer_with_image = answer
                     
                 history.append({"role": "assistant", "content": answer_with_image})
                 
@@ -515,7 +520,7 @@ with gr.Blocks(css="""
                 except Exception as e:
                     logger.error(f"세션 삭제 오류: {e}", exc_info=True)
                     return f"❌ 세션 삭제 실패: {e}", False, gr.update(visible=False)
-
+    
             
             def initiate_delete():
                 return gr.update(visible=True), gr.update(visible=True)
@@ -536,7 +541,7 @@ with gr.Blocks(css="""
                 """새 세션 생성 시 초기 히스토리 생성"""
                 history = [{"role": "system", "content": DEFAULT_SYSTEM_MESSAGE}]
                 return history, filter_messages_for_chatbot(history)
-
+    
             # 기존의 이벤트 핸들러 수정
             create_new_session_btn.click(
                 fn=create_new_session,
@@ -547,11 +552,11 @@ with gr.Blocks(css="""
                 inputs=[session_id, session_manage_info],
                 outputs=[history, chatbot]
             )
-
+    
             def on_session_applied(loaded_history, sid, info):
                 """세션 적용 시 채팅 표시 업데이트"""
                 return loaded_history, filter_messages_for_chatbot(loaded_history), info
-
+    
             apply_session_btn.click(
                 fn=apply_session,
                 inputs=[existing_sessions_dropdown],
