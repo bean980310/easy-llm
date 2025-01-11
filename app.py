@@ -263,7 +263,6 @@ with gr.Blocks(css="""
                 value=character_image_path,
                 label="프로필 이미지",
                 visible=True,
-                tool=False,
                 interactive=False
             )
         
