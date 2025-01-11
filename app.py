@@ -653,7 +653,7 @@ with gr.Blocks() as demo:
             queue=False
         )
         
-        def user_message(user_input, history, system_msg):
+        def user_message(user_input, session_id, history, system_msg):
             if not user_input.strip():
                 return "", history, ""
             if not history:
