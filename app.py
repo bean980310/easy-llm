@@ -263,7 +263,9 @@ with gr.Blocks(css="""
                 value=character_image_path,
                 label="프로필 이미지",
                 visible=True,
-                interactive=False
+                interactive=False,
+                width="500px",
+                height="500px"
             )
         
         with gr.Row():
