@@ -98,16 +98,17 @@ def add_system_preset(name, content):
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO system_presets (name, content) VALUES (?, ?)", (name, content))
+        cursor.execute("""
+            INSERT INTO system_presets (name, content) 
+            VALUES (?, ?)
+            ON CONFLICT(name) DO UPDATE SET content=excluded.content
+        """, (name, content))
         conn.commit()
         conn.close()
-        logger.info(f"새 시스템 메시지 프리셋 추가: {name}")
-        return True, "프리셋이 성공적으로 추가되었습니다."
-    except sqlite3.IntegrityError:
-        logger.warning(f"프리셋 이름 중복: {name}")
-        return False, "이미 존재하는 프리셋 이름입니다."
+        logger.info(f"프리셋 추가/업데이트: {name}")
+        return True, "프리셋이 성공적으로 추가/업데이트되었습니다."
     except Exception as e:
-        logger.error(f"시스템 메시지 프리셋 추가 오류: {e}")
+        logger.error(f"시스템 메시지 프리셋 추가/업데이트 오류: {e}")
         return False, f"오류 발생: {e}"
 
 # 시스템 메시지 프리셋 삭제
@@ -132,7 +133,7 @@ def initial_load_presets():
     presets = get_preset_choices()
     return gr.update(choices=presets)
 
-# 프리셋 추가 함수 수정
+# 프리셋 추가 핸들러
 def handle_add_preset(name, content):
     if not name.strip() or not content.strip():
         return "❌ 프리셋 이름과 내용을 모두 입력해주세요.", gr.update(choices=get_preset_choices())
@@ -143,7 +144,7 @@ def handle_add_preset(name, content):
     else:
         return message, gr.update(choices=get_preset_choices())
 
-# 프리셋 삭제 함수 수정
+# 프리셋 삭제 핸들러
 def handle_delete_preset(name):
     if not name:
         return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices())
