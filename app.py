@@ -4,6 +4,7 @@ import os
 import shutil
 import traceback
 import torch
+import gc
 import gradio as gr
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import openai
@@ -113,6 +114,14 @@ def clear_all_model_cache():
     현재 메모리에 로드된 모든 모델 캐시(models_cache)를 한 번에 삭제.
     필요하다면, 로컬 폴더의 .cache들도 일괄 삭제할 수 있음.
     """
+    for key, handler in list(models_cache.items()):
+        # 혹시 model, tokenizer 등 메모리를 점유하는 속성이 있으면 제거
+        if hasattr(handler, "model"):
+            del handler.model
+        if hasattr(handler, "tokenizer"):
+            del handler.tokenizer
+        # 필요 시 handler 내부의 다른 자원들(예: embeddings 등)도 정리
+        
     # 1) 메모리 캐시 전부 삭제
     count = len(models_cache)
     models_cache.clear()
@@ -122,12 +131,13 @@ def clear_all_model_cache():
     #    예: ./models/*/.cache 폴더 전부 삭제
     #    원치 않으면 주석처리
     
+    
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     elif torch.backends.mps.is_available():
         torch.mps.empty_cache()
-    else:
-        pass
+        
+    gc.collect()
         
     cache_deleted = 0
     for subdir, models in get_all_local_models().items():
