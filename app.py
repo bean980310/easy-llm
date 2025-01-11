@@ -326,6 +326,206 @@ with gr.Blocks(css="""
                 )
                 apply_preset_btn = gr.Button("프리셋 적용", interactive=False)  # Disable applying presets
 
+        # 세션 관리 섹션
+        with gr.Accordion("세션 관리", open=False):
+            gr.Markdown("### 세션 관리")
+            with gr.Row():
+                refresh_sessions_btn = gr.Button("세션 목록 갱신")
+                existing_sessions_dropdown = gr.Dropdown(
+                    label="기존 세션 목록",
+                    choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
+                    value=None,
+                    interactive=True
+                )
+            
+            with gr.Row():
+                create_new_session_btn = gr.Button("새 세션 생성")
+                apply_session_btn = gr.Button("세션 적용")
+                delete_session_btn = gr.Button("세션 삭제")
+            
+            # 삭제 확인을 위한 컴포넌트 추가
+            confirm_delete_checkbox = gr.Checkbox(
+                label="정말로 이 세션을 삭제하시겠습니까?",
+                value=False,
+                interactive=True,
+                visible=False  # 기본적으로 숨김
+            )
+            confirm_delete_btn = gr.Button(
+                "삭제 확인",
+                variant="stop",
+                visible=False  # 기본적으로 숨김
+            )
+            
+            session_manage_info = gr.Textbox(
+                label="세션 관리 결과",
+                interactive=False
+            )
+            
+            current_session_display = gr.Textbox(
+                label="현재 세션 ID",
+                value="",
+                interactive=False
+            )
+
+            session_id_state.change(
+                fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
+                inputs=[session_id_state],
+                outputs=[current_session_display]
+            )
+            
+            def refresh_sessions():
+                """
+                세션 목록 갱신: DB에서 세션 ID들을 불러와서 Dropdown에 업데이트
+                """
+                sessions = get_existing_sessions()
+                logger.info(f"가져온 세션 목록: {sessions}")  # 디버깅용 로그 추가
+                if not sessions:
+                    return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
+                return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
+            
+            def create_new_session():
+                """
+                새 세션 ID를 생성하고 session_id_state에 반영.
+                """
+                new_sid = secrets.token_hex(8)  # 새 세션 ID 생성
+                logger.info(f"새 세션 생성됨: {new_sid}")
+                
+                # 기본 시스템 메시지 설정
+                system_message = {
+                    "role": "system",
+                    "content": """
+                    미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                    성별: 여성
+                    나이: 20
+                    거주지: 유저의 모니터 속
+                    구사가능 언어: 한국어, 영어, 일본어, 중국어
+                    성격
+                    - 보이시하면서도 털털한 성격.
+                    - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                    - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                    외형적 특징
+                    - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                    - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                    - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                    - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                    - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                    취미
+                    - 게임
+                    특징
+                    - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                    슬로건
+                    “불의는 참지 않는다! 내가 나설게.”
+                    [설정]  
+                    너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                    너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                    너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                    너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                    """  # 현재 시스템 메시지 박스의 값을 사용
+                }
+                
+                # 새 세션에 시스템 메시지 저장
+                save_chat_history_db([system_message], session_id=new_sid)
+                
+                return new_sid, f"새 세션 생성: {new_sid}"
+        
+            def apply_session(chosen_sid):
+                """
+                Dropdown에서 선택된 세션 ID로, DB에서 history를 불러오고, session_id_state를 갱신
+                """
+                if not chosen_sid:
+                    return [], None, "세션 ID를 선택하세요."
+                loaded_history = load_chat_from_db(chosen_sid)
+                logger.info(f"불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
+                # history_state에 반영하고, session_id_state도 업데이트
+                return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+            def delete_session(chosen_sid, current_sid):
+                """
+                선택된 세션을 DB에서 삭제합니다.
+                현재 활성 세션은 삭제할 수 없습니다.
+                """
+                if not chosen_sid:
+                    return "❌ 삭제할 세션을 선택하세요.", False, gr.update()
+                
+                if chosen_sid == current_sid:
+                    return "❌ 현재 활성 세션은 삭제할 수 없습니다.", False, gr.update()
+                
+                try:
+                    conn = sqlite3.connect("chat_history.db")
+                    cursor = conn.cursor()
+                    # 삭제하기 전에 세션이 존재하는지 확인
+                    cursor.execute("SELECT COUNT(*) FROM chat_history WHERE session_id = ?", (chosen_sid,))
+                    count = cursor.fetchone()[0]
+                    if count == 0:
+                        return f"❌ 세션 '{chosen_sid}'이(가) DB에 존재하지 않습니다.", False, gr.update(visible=False)
+                    
+                    cursor.execute("DELETE FROM chat_history WHERE session_id = ?", (chosen_sid,))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"세션 삭제 완료: {chosen_sid}")
+                    return f"✅ 세션 '{chosen_sid}'이(가) 삭제되었습니다.", False, gr.update(visible=False)
+                except sqlite3.OperationalError as oe:
+                    logger.error(f"DB 운영 오류: {oe}")
+                    return f"❌ DB 운영 오류 발생: {oe}", False, gr.update(visible=False)
+                except Exception as e:
+                    logger.error(f"세션 삭제 오류: {e}")
+                    return f"❌ 세션 삭제 실패: {e}", False, gr.update(visible=False)
+            
+            # 버튼 이벤트 연결
+            def initiate_delete():
+                return gr.update(visible=True), gr.update(visible=True)
+            
+            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            def confirm_delete(chosen_sid, current_sid, confirm):
+                if not confirm:
+                    return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
+                return delete_session(chosen_sid, current_sid)
+    
+            refresh_sessions_btn.click(
+                fn=refresh_sessions,
+                inputs=[],
+                outputs=[existing_sessions_dropdown, session_manage_info]
+            )
+            
+            create_new_session_btn.click(
+                fn=create_new_session,
+                inputs=[],
+                outputs=[session_id_state, session_manage_info]
+            ).then(
+                fn=lambda: [],  # 새 세션 생성 시 히스토리 초기화
+                inputs=[],
+                outputs=[history_state]
+            ).then(
+                fn=filter_messages_for_chatbot,  # 초기화된 히스토리를 Chatbot에 반영
+                inputs=[history_state],
+                outputs=[chatbot]
+            )
+            
+            apply_session_btn.click(
+                fn=apply_session,
+                inputs=[existing_sessions_dropdown],
+                outputs=[history_state, session_id_state, session_manage_info]
+            ).then(
+                fn=filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
+                inputs=[history_state],
+                outputs=chatbot                 # (3) Chatbot 업데이트
+            )
+            
+            delete_session_btn.click(
+                fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+                inputs=[],
+                outputs=[confirm_delete_checkbox, confirm_delete_btn]
+            )
+            
+            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            confirm_delete_btn.click(
+                fn=confirm_delete,
+                inputs=[existing_sessions_dropdown, session_id_state, confirm_delete_checkbox],
+                outputs=[session_manage_info, confirm_delete_checkbox, confirm_delete_btn]
+            ).then(
+                fn=refresh_sessions,  # 세션 삭제 후 목록 새로고침
+                inputs=[],
+                outputs=[existing_sessions_dropdown, session_manage_info]
+            )
         # 장치 설정 섹션 유지
         with gr.Accordion("장치 설정", open=False):
             device_dropdown = gr.Dropdown(
