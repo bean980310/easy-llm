@@ -5,8 +5,6 @@ from llama_cpp import Llama # gguf 모델을 로드하기 위한 라이브러리
 from llama_cpp.llama_tokenizer import LlamaHFTokenizer
 import os
 
-from utils import make_local_dir_name
-
 class GGUFModelHandler:
     def __init__(self, model_id, quantization_bit="qint8", local_model_path=None, model_type="gguf"):
         """
@@ -15,18 +13,24 @@ class GGUFModelHandler:
         self.model_id = model_id
         self.quantization_bit = quantization_bit
         self.model_type = model_type
-        self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
+        self.local_model_path = local_model_path or os.path.join("./models", model_type, self.make_local_dir_name(model_id, quantization_bit))
         self.llm = None
         self.load_model()
+    
+    def make_local_dir_name(self, model_id, quantization_bit):
+        """
+        모델 ID와 양자화 비트를 기반으로 로컬 디렉토리 이름 생성
+        """
+        return f"{model_id.replace('/', '_')}_{quantization_bit}"
     
     def load_model(self):
         """
         GGUF 모델 로드
         """
-        logging.info(f"GGUF 모델 로드 시작: {self.model_dir}")
+        logging.info(f"GGUF 모델 로드 시작: {self.local_model_path}")
         try:
             self.llm = Llama(
-                model_path=self.model_dir,
+                model_path=self.local_model_path,
                 n_ctx=2048,
                 n_threads=4,
                 # 필요에 따라 추가 매개변수 설정

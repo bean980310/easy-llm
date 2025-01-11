@@ -11,7 +11,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from model_handlers import (
     GGUFModelHandler,MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
-    Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler, MlxQwenHandler
+    Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler
 )
 from huggingface_hub import HfApi, list_models
 from utils import (
@@ -162,19 +162,7 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
         models_cache[build_model_cache_key(model_id, model_type, quantization_bit, local_model_path)] = handler
         return handler
     elif model_type == "mlx":
-        # MLX 모델 로딩 로직
-        if model_id in ["Qwen/Qwen2-7B-Instruct-MLX", "mlx-community/Qwen2.5-7B-Instruct-4bit"]:
-            if not ensure_model_available(model_id, local_model_path, model_type):
-                logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
-                return None
-            handler = MlxQwenHandler(
-                model_id=model_id,
-                local_model_path=local_model_path,
-                model_type=model_type
-            )
-            models_cache[build_model_cache_key(model_id, model_type)] = handler
-            return handler
-        elif "vision" in model_id.lower():
+        if "vision" in model_id.lower() or "qwen2-vl" in model_id.lower():
             if not ensure_model_available(model_id, local_model_path, model_type):
                 logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
                 return None
@@ -466,7 +454,7 @@ with gr.Blocks() as demo:
             """
             image_visible = (
                 "vision" in selected_model.lower() or
-                "Vision" in selected_model or
+                "qwen2-vl" in selected_model.lower() or
                 selected_model in [
                     "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
                     "THUDM/glm-4v-9b",
