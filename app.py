@@ -166,6 +166,24 @@ with gr.Blocks() as demo:
                 )
             with gr.Row():
                 status_text = gr.Markdown("", elem_id="status_text")
+            with gr.Row():
+                seed_input = gr.Number(
+                    label="시드 값",
+                    value=42,
+                    precision=0,
+                    step=1,
+                    interactive=True,
+                    info="모델의 예측을 재현 가능하게 하기 위해 시드를 설정하세요."
+                )
+                
+            seed_state = gr.State(42)
+        
+            # 시드 입력과 상태 연결
+            seed_input.change(
+                fn=lambda seed: seed if seed is not None else 42,
+                inputs=[seed_input],
+                outputs=[seed_state]
+            )
         
         # 함수: OpenAI API Key와 사용자 지정 모델 경로 필드의 가시성 제어
         def toggle_api_key_visibility(selected_model):
@@ -252,7 +270,7 @@ with gr.Blocks() as demo:
             history.append({"role": "user", "content": user_input})
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
-        def bot_message(session_id, history, selected_model, custom_path, image, api_key, device):
+        def bot_message(session_id, history, selected_model, custom_path, image, api_key, device, seed):
             # 모델 유형 결정
             local_model_path = None
             if selected_model in api_models:
@@ -275,7 +293,7 @@ with gr.Blocks() as demo:
                 local_model_path = None  # 기본 로컬 경로 사용
                 
             try:
-                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device)
+                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device, seed)
             except Exception as e:
                 answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
                 
@@ -293,7 +311,7 @@ with gr.Blocks() as demo:
                     messages_for_chatbot.append({"role": msg["role"], "content": content})
             return messages_for_chatbot
 
-        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state]
+        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
         
         # 메시지 전송 시 함수 연결
         msg.submit(

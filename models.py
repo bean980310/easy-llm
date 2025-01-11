@@ -1,6 +1,8 @@
 # models.py
 
+import random
 import platform
+import numpy as np
 import torch
 from cache import models_cache
 from model_handlers import (
@@ -214,10 +216,20 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
 
-def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None, device="cpu"):
+def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None, device="cpu", seed=42):
     """
     사용자 히스토리를 기반으로 답변 생성.
     """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    elif torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    else:
+        torch.manual_seed(seed)
+        
     if not history:
         system_message = {
             "role": "system",
