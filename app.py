@@ -9,6 +9,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 import secrets
+import uuid 
 import base64
 from huggingface_hub import HfApi
 from utils import (
@@ -192,7 +193,7 @@ with gr.Blocks(css="""
         # Instead of displaying a fixed model, show the model type selected
         fixed_model_display = gr.Textbox(
             label="선택된 모델 유형",
-            value="gguf",
+            value=get_fixed_model_id("gguf"),
             interactive=False
         )
         
@@ -244,15 +245,21 @@ with gr.Blocks(css="""
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
         def bot_message(session_id, history, device, seed, model_type):
+            # 모델 유형이 None인지 확인
+            if model_type is None:
+                logger.error("모델 유형이 선택되지 않았습니다.")
+                return history, "❌ 모델 유형이 선택되지 않았습니다."
+            
             # Get the fixed model ID based on model_type
             selected_model = get_fixed_model_id(model_type)
+            logger.info(f"Selected model_type: {model_type}, model_id: {selected_model}")
             if not selected_model:
                 logger.error(f"모델 유형 '{model_type}'에 대한 고정된 모델 ID를 찾을 수 없습니다.")
                 return history, "❌ 지원되지 않는 모델 유형입니다."
             local_model_path = None  # No custom path
             
             try:
-                answer = generate_answer(history, selected_model, model_type, local_model_path, None, None, device, seed)
+                answer = generate_answer(history, model_type, local_model_path, None, None, device, seed)
                 
                 # 챗봇 응답에 캐릭터 이미지 추가
                 if encoded_character_image:
@@ -266,7 +273,13 @@ with gr.Blocks(css="""
                 
             history.append({"role": "assistant", "content": answer_with_image})
             
+            # 세션 ID가 None인지 확인
+            if not session_id:
+                logger.error("세션 ID가 None입니다.")
+                return history, "❌ 세션 ID가 유효하지 않습니다."
+            
             save_chat_history_db(history, session_id=session_id)
+            logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
             return history, ""  # 로딩 상태 제거
         
         def filter_messages_for_chatbot(history):
@@ -282,6 +295,13 @@ with gr.Blocks(css="""
             fn=lambda model_type: get_fixed_model_id(model_type),
             inputs=[model_type_dropdown],
             outputs=[fixed_model_display],
+            queue=False
+        )
+        
+        demo.load(
+            fn=on_app_start,
+            inputs=[],
+            outputs=[session_id_state, history_state],
             queue=False
         )
 
