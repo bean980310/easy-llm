@@ -453,11 +453,17 @@ with gr.Blocks() as demo:
         history_state = gr.State([])
         
         # 함수: OpenAI API Key와 사용자 지정 모델 경로 필드의 가시성 제어
-        def toggle_visibility(selected_model):
+        def toggle_api_key_visibility(selected_model):
             """
-            OpenAI API Key 입력 필드와 사용자 지정 모델 경로 입력 필드의 가시성을 제어합니다.
+            OpenAI API Key 입력 필드의 가시성을 제어합니다.
             """
             api_visible = selected_model in api_models
+            return gr.update(visible=api_visible)
+
+        def toggle_image_input_visibility(selected_model):
+            """
+            이미지 입력 필드의 가시성을 제어합니다.
+            """
             image_visible = (
                 "vision" in selected_model.lower() or
                 "Vision" in selected_model or
@@ -467,16 +473,16 @@ with gr.Blocks() as demo:
                     "openbmb/MiniCPM-Llama3-V-2_5"
                 ]
             )
-            return (
-                gr.update(visible=api_visible),
-                gr.update(visible=image_visible)
-            )
+            return gr.update(visible=image_visible)
         
         # 모델 선택 변경 시 가시성 토글
         model_dropdown.change(
-            fn=toggle_visibility,
+            fn=lambda selected_model: (
+                toggle_api_key_visibility(selected_model),
+                toggle_image_input_visibility(selected_model)
+            ),
             inputs=[model_dropdown],
-            outputs=[api_key_text, image_input, image_info]
+            outputs=[api_key_text, image_input]
         )
         def update_model_list(selected_type):
             local_models_data = get_all_local_models()
@@ -1110,4 +1116,4 @@ with gr.Blocks() as demo:
             outputs=[custom_model_path_state]
         )
 
-demo.launch(debug=True, inbrowser=True, server_port=7861)
+demo.launch(debug=True, inbrowser=True, server_port=7861, width=500)
