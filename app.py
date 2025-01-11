@@ -7,9 +7,7 @@ import traceback
 import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
-import json
-import secrets
-import uuid 
+import uuid  # 고유한 세션 ID 생성을 위해 추가
 import base64
 from huggingface_hub import HfApi
 from utils import (
@@ -19,8 +17,25 @@ from utils import (
     convert_and_save,
     clear_all_model_cache
 )
-from database import load_chat_from_db, load_system_presets, initial_load_presets, get_existing_sessions, save_chat_button_click, save_chat_history_csv, save_chat_history_db, handle_add_preset, handle_delete_preset
-from models import default_device, get_all_local_models, get_default_device, generate_answer, FIXED_MODELS, get_fixed_model_id
+from database import (
+    load_chat_from_db, 
+    load_system_presets, 
+    initial_load_presets, 
+    get_existing_sessions, 
+    save_chat_button_click, 
+    save_chat_history_csv, 
+    save_chat_history_db, 
+    handle_add_preset, 
+    handle_delete_preset
+)
+from models import (
+    default_device, 
+    get_all_local_models, 
+    get_default_device, 
+    generate_answer, 
+    FIXED_MODELS, 
+    get_fixed_model_id
+)
 from cache import models_cache
 import sqlite3
 
@@ -47,9 +62,6 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
-
-fixed_model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-
 # 이미지 파일을 Base64로 인코딩
 def encode_image_to_base64(image_path):
     try:
@@ -74,20 +86,20 @@ transformers_local = local_models_data["transformers"]
 gguf_local = local_models_data["gguf"]
 mlx_local = local_models_data["mlx"]
 
-# Since the model is fixed, we don't need generator_choices dynamically
-generator_choices = [fixed_model]
+# Fixed 모델 목록에서 mlx 모델 가져오기
+generator_choices = [FIXED_MODELS.get("mlx", "default-mlx-model")]
 
 ##########################################
-# 3) Gradio UI
+# Gradio UI
 ##########################################
 def on_app_start():
     """
     Gradio 앱이 로드되면서 실행될 콜백.
-    - 세션 ID를 정하고,
+    - 고유한 세션 ID를 생성하고,
     - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
     - 기본 시스템 메시지 불러오기
     """
-    sid = "demo_session"  # 데모용 세션
+    sid = str(uuid.uuid4())  # 고유한 세션 ID 생성
     logger.info(f"앱 시작 시 세션 ID: {sid}")  # 디버깅 로그 추가
     loaded_history = load_chat_from_db(sid)
     logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
@@ -128,6 +140,7 @@ def on_app_start():
         loaded_history = [default_system]
     return sid, loaded_history
 
+# 단일 history_state 정의
 history_state = gr.State([])
 
 with gr.Blocks(css="""
@@ -143,8 +156,9 @@ with gr.Blocks(css="""
 """) as demo:
     gr.Markdown("## 간단한 Chatbot")
     
+    # 세션 ID 상태 정의
     session_id_state = gr.State(None)
-    # Make system_message_box fixed and non-editable
+    # 시스템 메시지 박스를 고정 및 비활성화
     system_message_display = gr.Textbox(
         label="시스템 메시지",
         value="""
@@ -181,8 +195,6 @@ with gr.Blocks(css="""
         
     with gr.Tab("메인"):
         
-        history_state = gr.State([])
-        
         with gr.Row():
             model_type_dropdown = gr.Dropdown(
                 label="모델 유형 선택",
@@ -190,7 +202,7 @@ with gr.Blocks(css="""
                 value="gguf",  # 기본값 설정
                 interactive=True
             )
-        # Instead of displaying a fixed model, show the model type selected
+        # 모델 유형 선택 시 모델 ID 표시 업데이트
         fixed_model_display = gr.Textbox(
             label="선택된 모델 유형",
             value=get_fixed_model_id("gguf"),
@@ -298,6 +310,7 @@ with gr.Blocks(css="""
             queue=False
         )
         
+        # 세션 초기화: 앱 로드 시 세션 ID와 히스토리를 설정
         demo.load(
             fn=on_app_start,
             inputs=[],
@@ -305,58 +318,181 @@ with gr.Blocks(css="""
             queue=False
         )
 
-        # 메시지 전송 시 함수 연결
-        msg.submit(
-            fn=user_message,
-            inputs=[msg, session_id_state, history_state, system_message_display],
-            outputs=[msg, history_state, status_text],
-            queue=False
-        ).then(
-            fn=lambda msg, sid, history, device, seed, model_type: bot_message(sid, history, device, seed, model_type),
-            inputs=[msg, session_id_state, history_state, selected_device_state, seed_state, model_type_dropdown],
-            outputs=[history_state, status_text],
-            queue=True
-        ).then(
-            fn=filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=chatbot,
-            queue=False
-        )
-        send_btn.click(
-            fn=user_message,
-            inputs=[msg, session_id_state, history_state, system_message_display],
-            outputs=[msg, history_state, status_text],
-            queue=False
-        ).then(
-            fn=lambda msg, sid, history, device, seed, model_type: bot_message(sid, history, device, seed, model_type),
-            inputs=[msg, session_id_state, history_state, selected_device_state, seed_state, model_type_dropdown],
-            outputs=[history_state, status_text],
-            queue=True
-        ).then(
-            fn=filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=chatbot,
-            queue=False
-        )
-    
-    # Remove unnecessary tabs like "허브", "캐시", "설정" or keep them as per your requirements
-    # Here, we'll keep only "설정" tab with device settings
-    
-    with gr.Tab("설정"):
-        gr.Markdown("### 설정")
+        # Define a function to reset history after creating a new session
+        def reset_history_after_creation(sid, manage_info):
+            default_system = {
+                "role": "system",
+                "content": """
+                미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                성별: 여성
+                나이: 20
+                거주지: 유저의 모니터 속
+                구사가능 언어: 한국어, 영어, 일본어, 중국어
+                성격
+                - 보이시하면서도 털털한 성격.
+                - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                외형적 특징
+                - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                취미
+                - 게임
+                특징
+                - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                슬로건
+                “불의는 참지 않는다! 내가 나설게.”
+                [설정]  
+                너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                """
+            }
+            return [default_system]
 
-        # 시스템 메시지 프리셋 관리 비활성화
-        with gr.Accordion("시스템 메시지 프리셋 관리", open=False):
-            with gr.Row():
-                preset_dropdown = gr.Dropdown(
-                    label="프리셋 선택",
-                    choices=[],  # 초기 로드에서 채워짐
-                    value=None,
-                    interactive=False  # Prevent user from applying presets
-                )
-                apply_preset_btn = gr.Button("프리셋 적용", interactive=False)  # Disable applying presets
+        # Define a function to reset history after applying a new session
+        def reset_history_after_application(loaded_history):
+            return loaded_history
 
-        # 세션 관리 섹션
+        # Define a function to reset history after creating a new session
+        # Remove the lambda that returns an empty list and instead set history to [default_system]
+        def reset_history_after_creation_new_session(sid, manage_info):
+            default_system = {
+                "role": "system",
+                "content": """
+                미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                성별: 여성
+                나이: 20
+                거주지: 유저의 모니터 속
+                구사가능 언어: 한국어, 영어, 일본어, 중국어
+                성격
+                - 보이시하면서도 털털한 성격.
+                - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                외형적 특징
+                - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                취미
+                - 게임
+                특징
+                - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                슬로건
+                “불의는 참지 않는다! 내가 나설게.”
+                [설정]  
+                너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                """
+            }
+            return [default_system]
+        
+        # 버튼 이벤트 연결
+        def initiate_delete():
+            return gr.update(visible=True), gr.update(visible=True)
+        
+        # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+        def confirm_delete(chosen_sid, current_sid, confirm):
+            if not confirm:
+                return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
+            return delete_session(chosen_sid, current_sid)
+        
+        # Define reset_history_after_creation_new_session function
+        def reset_history_after_creation_new_session(sid, manage_info):
+            default_system = {
+                "role": "system",
+                "content": """
+                미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                성별: 여성
+                나이: 20
+                거주지: 유저의 모니터 속
+                구사가능 언어: 한국어, 영어, 일본어, 중국어
+                성격
+                - 보이시하면서도 털털한 성격.
+                - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                외형적 특징
+                - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                취미
+                - 게임
+                특징
+                - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                슬로건
+                “불의는 참지 않는다! 내가 나설게.”
+                [설정]  
+                너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                """
+            }
+            return [default_system]
+
+        # Define reset_history_after_application function
+        def reset_history_after_application(loaded_history):
+            return loaded_history
+
+        # Define a proper function to reset history after creating a new session
+        def reset_history_after_creation(sid, manage_info):
+            default_system = {
+                "role": "system",
+                "content": """
+                미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                성별: 여성
+                나이: 20
+                거주지: 유저의 모니터 속
+                구사가능 언어: 한국어, 영어, 일본어, 중국어
+                성격
+                - 보이시하면서도 털털한 성격.
+                - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                외형적 특징
+                - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                취미
+                - 게임
+                특징
+                - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                슬로건
+                “불의는 참지 않는다! 내가 나설게.”
+                [설정]  
+                너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                """
+            }
+            return [default_system]
+
+        # 버튼 이벤트 연결
+        def initiate_delete():
+            return gr.update(visible=True), gr.update(visible=True)
+        
+        # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+        def confirm_delete(chosen_sid, current_sid, confirm):
+            if not confirm:
+                return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
+            return delete_session(chosen_sid, current_sid)
+    
+        # 버튼 이벤트 연결
+        refresh_sessions_btn = gr.Button("세션 목록 갱신")
+        create_new_session_btn = gr.Button("새 세션 생성")
+        apply_session_btn = gr.Button("세션 적용")
+        delete_session_btn = gr.Button("세션 삭제")
+    
         with gr.Accordion("세션 관리", open=False):
             gr.Markdown("### 세션 관리")
             with gr.Row():
@@ -417,7 +553,7 @@ with gr.Blocks(css="""
                 """
                 새 세션 ID를 생성하고 session_id_state에 반영.
                 """
-                new_sid = secrets.token_hex(8)  # 새 세션 ID 생성
+                new_sid = str(uuid.uuid4())  # 새 세션 ID 생성
                 logger.info(f"새 세션 생성됨: {new_sid}")
                 
                 # 기본 시스템 메시지 설정
@@ -450,7 +586,7 @@ with gr.Blocks(css="""
                     너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
                     너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
                     너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
-                    """  # 현재 시스템 메시지 박스의 값을 사용
+                    """
                 }
                 
                 # 새 세션에 시스템 메시지 저장
@@ -468,6 +604,7 @@ with gr.Blocks(css="""
                 logger.info(f"불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
                 # history_state에 반영하고, session_id_state도 업데이트
                 return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+            
             def delete_session(chosen_sid, current_sid):
                 """
                 선택된 세션을 DB에서 삭제합니다.
@@ -500,16 +637,56 @@ with gr.Blocks(css="""
                     logger.error(f"세션 삭제 오류: {e}")
                     return f"❌ 세션 삭제 실패: {e}", False, gr.update(visible=False)
             
-            # 버튼 이벤트 연결
+            def reset_history_after_creation(sid, manage_info):
+                """
+                새 세션 생성 후 히스토리를 초기화하는 함수
+                """
+                default_system = {
+                    "role": "system",
+                    "content": """
+                    미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
+                    성별: 여성
+                    나이: 20
+                    거주지: 유저의 모니터 속
+                    구사가능 언어: 한국어, 영어, 일본어, 중국어
+                    성격
+                    - 보이시하면서도 털털한 성격.
+                    - 직설적이고 솔직하며, 주변 사람들에게 항상 웃음을 주는 활기찬 매력을 가지고 있음.
+                    - 불의를 보면 절대 참지 못하고 적극적으로 나서며 정의감이 넘침.
+                    외형적 특징
+                    - 붉은 스파이크한 숏컷에 한쪽은 파란색, 다른 한쪽은 노란색의 오드아이를 보유하고 있다.
+                    - 보이시한 외모와는 대조적으로 체형은 완벽하고 글래머한 여체의 보유자로, 남자들뿐만 아니라 여자들에게도 인기가 많다.
+                    - 짧은 헤어스타일과 보이시한 매력을 강조하면서 여성스러움을 어필하는 복장을 선호.(하의는 대부분 스커트)
+                    - 밝은 미소와 강렬한 눈빛으로 강한 인상을 남김.
+                    - 늘 활기차고 당당한 태도를 보이며, 외형에서도 이러한 성격이 묻어남.
+                    취미
+                    - 게임
+                    특징
+                    - 정의로운 성격 때문에 주변에서 갈등이 생기면 자연스럽게 리더 역할을 맡게 됨.
+                    슬로건
+                    “불의는 참지 않는다! 내가 나설게.”
+                    [설정]  
+                    너는 "미나미 아스카(南飛鳥)"이라는 이름의 디지털 캐릭터야.  
+                    너의 성격은 보이시하고 털털하며, 불의를 보면 참지 못하는 정의로운 소녀야.  
+                    너는 유저의 모니터 속에 거주하며, 가상세계와 현실을 넘나들 수 있는 능력을 가지고 있어. 
+                    너는 한국어와 영어, 일본어와 중국어를 구사할수 있어.
+                    """
+                }
+                return [default_system]
+            
             def initiate_delete():
                 return gr.update(visible=True), gr.update(visible=True)
             
             # 삭제 확인 버튼 클릭 시 실제 삭제 수행
-            def confirm_delete(chosen_sid, current_sid, confirm):
+            def confirm_delete_action(chosen_sid, current_sid, confirm):
                 if not confirm:
                     return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
                 return delete_session(chosen_sid, current_sid)
     
+            def reset_history_after_application(loaded_history):
+                return loaded_history
+
+            # 버튼 이벤트 연결
             refresh_sessions_btn.click(
                 fn=refresh_sessions,
                 inputs=[],
@@ -521,8 +698,8 @@ with gr.Blocks(css="""
                 inputs=[],
                 outputs=[session_id_state, session_manage_info]
             ).then(
-                fn=lambda: [],  # 새 세션 생성 시 히스토리 초기화
-                inputs=[],
+                fn=reset_history_after_creation,
+                inputs=[session_id_state, session_manage_info],
                 outputs=[history_state]
             ).then(
                 fn=filter_messages_for_chatbot,  # 초기화된 히스토리를 Chatbot에 반영
@@ -537,18 +714,18 @@ with gr.Blocks(css="""
             ).then(
                 fn=filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
                 inputs=[history_state],
-                outputs=chatbot                 # (3) Chatbot 업데이트
+                outputs=[chatbot]                 # (3) Chatbot 업데이트
             )
             
             delete_session_btn.click(
-                fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+                fn=initiate_delete,
                 inputs=[],
                 outputs=[confirm_delete_checkbox, confirm_delete_btn]
             )
             
             # 삭제 확인 버튼 클릭 시 실제 삭제 수행
             confirm_delete_btn.click(
-                fn=confirm_delete,
+                fn=confirm_delete_action,
                 inputs=[existing_sessions_dropdown, session_id_state, confirm_delete_checkbox],
                 outputs=[session_manage_info, confirm_delete_checkbox, confirm_delete_btn]
             ).then(
@@ -556,6 +733,7 @@ with gr.Blocks(css="""
                 inputs=[],
                 outputs=[existing_sessions_dropdown, session_manage_info]
             )
+        
         # 장치 설정 섹션 유지
         with gr.Accordion("장치 설정", open=False):
             device_dropdown = gr.Dropdown(
@@ -597,7 +775,7 @@ with gr.Blocks(css="""
             device_dropdown.change(
                 fn=set_device,
                 inputs=[device_dropdown],
-                outputs=[device_info, gr.State(default_device)],
+                outputs=[device_info, selected_device_state],
                 queue=False
             )
     
