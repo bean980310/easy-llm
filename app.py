@@ -19,7 +19,7 @@ from utils import (
     clear_all_model_cache
 )
 from database import load_chat_from_db, load_system_presets, initial_load_presets, get_existing_sessions, save_chat_button_click, save_chat_history_csv, save_chat_history_db, handle_add_preset, handle_delete_preset
-from models import default_device, get_all_local_models, get_default_device, generate_answer, FIXED_MODELS
+from models import default_device, get_all_local_models, get_default_device, generate_answer, FIXED_MODELS, get_fixed_model_id
 from cache import models_cache
 import sqlite3
 
@@ -244,7 +244,11 @@ with gr.Blocks(css="""
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
         def bot_message(session_id, history, device, seed, model_type):
-            selected_model = FIXED_MODELS.get(model_type, "mlx-community/Qwen2.5-7B-Instruct-4bit")  # 기본값 설정
+            # Get the fixed model ID based on model_type
+            selected_model = get_fixed_model_id(model_type)
+            if not selected_model:
+                logger.error(f"모델 유형 '{model_type}'에 대한 고정된 모델 ID를 찾을 수 없습니다.")
+                return history, "❌ 지원되지 않는 모델 유형입니다."
             local_model_path = None  # No custom path
             
             try:
@@ -264,7 +268,7 @@ with gr.Blocks(css="""
             
             save_chat_history_db(history, session_id=session_id)
             return history, ""  # 로딩 상태 제거
-    
+        
         def filter_messages_for_chatbot(history):
             messages_for_chatbot = []
             for msg in history:
@@ -273,8 +277,14 @@ with gr.Blocks(css="""
                     messages_for_chatbot.append({"role": msg["role"], "content": content})
             return messages_for_chatbot
 
-        bot_message_inputs = [session_id_state, history_state, selected_device_state, seed_state, model_type_dropdown]
-        
+        # 모델 유형 변경 시 모델 ID 표시 업데이트
+        model_type_dropdown.change(
+            fn=lambda model_type: get_fixed_model_id(model_type),
+            inputs=[model_type_dropdown],
+            outputs=[fixed_model_display],
+            queue=False
+        )
+
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,

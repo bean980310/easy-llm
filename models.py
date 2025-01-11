@@ -41,6 +41,12 @@ FIXED_MODELS = {
     "mlx": "mlx-community/Qwen2.5-7B-Instruct-4bit"                     # 예: "mlx-model"
 }
 
+def get_fixed_model_id(model_type: str) -> str:
+    """
+    Returns the fixed model ID based on the model type.
+    """
+    return FIXED_MODELS.get(model_type, "mlx-community/Qwen2.5-7B-Instruct-4bit")  # 기본값 설정
+
 def load_model(selected_model: str, model_type: str, quantization_bit: str = "Q8_0", local_model_path: str = None, device: str = "cpu") -> object:
     """
     모델 로드 함수. 모델 유형에 따라 적절한 핸들러를 사용하여 모델을 로드하고 캐시에 저장.
