@@ -16,6 +16,11 @@ import logging
 import traceback
 import openai
 
+from langchain.chains.llm import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.llms import OpenAI, LlamaCpp, Ollama, HuggingFacePipeline
+from langchain.llms.base import Runnable
+
 logger = logging.getLogger(__name__)
 
 LOCAL_MODELS_ROOT = "./models"
@@ -282,3 +287,75 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
         except Exception as e:
             logger.error(f"모델 추론 오류: {str(e)}\n\n{traceback.format_exc()}")
             return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
+        
+# models.py
+
+def generate_stable_diffusion_prompt_cached(user_input, selected_model, model_type, local_model_path=None, api_key=None, device="cpu", seed=42):
+    """
+    사용자 입력을 기반으로 Stable Diffusion 프롬프트를 생성합니다.
+    API 모델과 로컬 모델을 모두 지원합니다.
+    """
+    try:
+        prompt_template = """
+        당신은 이미지 생성에 최적화된 프롬프트를 생성하는 AI입니다.
+        다음 설명을 바탕으로 상세한 Stable Diffusion 프롬프트를 작성해주세요:
+        
+        설명: {description}
+        
+        프롬프트:
+        """
+        
+        template = PromptTemplate(
+            input_variables=["description"],
+            template=prompt_template
+        )
+        
+        if model_type == "api":
+            # API 모델을 사용하는 경우
+            if not api_key:
+                return "❌ OpenAI API Key가 필요합니다."
+            llm = OpenAI(api_key=api_key, model=selected_model, temperature=0.7)
+        elif model_type == "transformers":
+            # Transformers 로컬 모델을 사용하는 경우
+            if not local_model_path:
+                return "❌ 로컬 모델 경로가 필요합니다."
+            from transformers import pipeline
+            # HuggingFace Pipeline 초기화 (예시)
+            try:
+                hf_pipeline = pipeline("text-generation", model=local_model_path)
+                llm = HuggingFacePipeline(pipeline=hf_pipeline)
+            except Exception as e:
+                logger.error(f"Transformers 로컬 모델 초기화 오류: {e}")
+                return f"❌ Transformers 로컬 모델 초기화 오류: {e}"
+        elif model_type == "gguf":
+            # GGUF 로컬 모델을 사용하는 경우 (예시: LlamaCpp)
+            if not local_model_path:
+                return "❌ 로컬 모델 경로가 필요합니다."
+            try:
+                llm = LlamaCpp(model_path=local_model_path, n_ctx=512, n_batch=64)
+            except Exception as e:
+                logger.error(f"GGUF 로컬 모델 초기화 오류: {e}")
+                return f"❌ GGUF 로컬 모델 초기화 오류: {e}"
+        elif model_type == "mlx":
+            # MLX 로컬 모델을 사용하는 경우 (예시: Ollama)
+            if not local_model_path:
+                return "❌ 로컬 모델 경로가 필요합니다."
+            try:
+                llm = Ollama(model=selected_model, model_path=local_model_path)
+            except Exception as e:
+                logger.error(f"MLX 로컬 모델 초기화 오류: {e}")
+                return f"❌ MLX 로컬 모델 초기화 오류: {e}"
+        else:
+            return "❌ 지원되지 않는 모델 유형입니다."
+        
+        # LLMChain 생성
+        if not isinstance(llm, Runnable):
+            return "❌ LLM 인스턴스가 Runnable이 아닙니다."
+        
+        chain = LLMChain(llm=llm, prompt=template)
+        prompt = chain.run(description=user_input)
+        
+        return prompt
+    except Exception as e:
+        logger.error(f"Stable Diffusion 프롬프트 생성 오류: {str(e)}")
+        return f"❌ 프롬프트 생성 중 오류가 발생했습니다: {str(e)}"
