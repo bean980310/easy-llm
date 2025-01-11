@@ -32,6 +32,128 @@ from utils import (
 from cache import models_cache
 import sqlite3
 
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 로그 포맷 정의
+formatter = logging.Formatter(
+    fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# 콘솔 핸들러 추가
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# 파일 핸들러 추가 (로테이팅 파일 핸들러 사용)
+log_file = "app.log"  # 원하는 로그 파일 경로로 변경 가능
+rotating_file_handler = RotatingFileHandler(
+    log_file, maxBytes=5*1024*1024, backupCount=5  # 5MB마다 새로운 파일로 교체, 최대 5개 백업
+)
+rotating_file_handler.setFormatter(formatter)
+logger.addHandler(rotating_file_handler)
+
+# 메모리 상에 로드된 모델들을 저장하는 캐시
+LOCAL_MODELS_ROOT = "./models"
+
+# DB 초기화 시 시스템 메시지 프리셋 테이블 생성
+def initialize_presets_db():
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_presets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                content TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("시스템 메시지 프리셋 테이블 초기화 완료.")
+    except Exception as e:
+        logger.error(f"시스템 메시지 프리셋 DB 초기화 오류: {e}")
+
+# 앱 시작 시 DB 초기화 함수 호출
+initialize_presets_db()
+
+# 시스템 메시지 프리셋 불러오기
+def load_system_presets():
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, content FROM system_presets ORDER BY name ASC")
+        rows = cursor.fetchall()
+        conn.close()
+        presets = {name: content for name, content in rows}
+        return presets
+    except Exception as e:
+        logger.error(f"시스템 메시지 프리셋 불러오기 오류: {e}")
+        return {}
+
+# 새로운 시스템 메시지 프리셋 추가
+def add_system_preset(name, content):
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO system_presets (name, content) VALUES (?, ?)", (name, content))
+        conn.commit()
+        conn.close()
+        logger.info(f"새 시스템 메시지 프리셋 추가: {name}")
+        return True, "프리셋이 성공적으로 추가되었습니다."
+    except sqlite3.IntegrityError:
+        logger.warning(f"프리셋 이름 중복: {name}")
+        return False, "이미 존재하는 프리셋 이름입니다."
+    except Exception as e:
+        logger.error(f"시스템 메시지 프리셋 추가 오류: {e}")
+        return False, f"오류 발생: {e}"
+
+# 시스템 메시지 프리셋 삭제
+def delete_system_preset(name):
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM system_presets WHERE name = ?", (name,))
+        conn.commit()
+        conn.close()
+        logger.info(f"시스템 메시지 프리셋 삭제: {name}")
+        return True, "프리셋이 성공적으로 삭제되었습니다."
+    except Exception as e:
+        logger.error(f"시스템 메시지 프리셋 삭제 오류: {e}")
+        return False, f"오류 발생: {e}"
+def get_preset_choices():
+    presets = load_system_presets()
+    return sorted(presets.keys())
+
+# 초기 로드 시 프리셋 Dropdown 업데이트
+def initial_load_presets():
+    presets = get_preset_choices()
+    return gr.update(choices=presets)
+
+# 프리셋 추가 함수 수정
+def handle_add_preset(name, content):
+    if not name.strip() or not content.strip():
+        return "❌ 프리셋 이름과 내용을 모두 입력해주세요.", gr.update(choices=get_preset_choices())
+    success, message = add_system_preset(name.strip(), content.strip())
+    if success:
+        presets = get_preset_choices()
+        return message, gr.update(choices=presets)
+    else:
+        return message, gr.update(choices=get_preset_choices())
+
+# 프리셋 삭제 함수 수정
+def handle_delete_preset(name):
+    if not name:
+        return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices())
+    success, message = delete_system_preset(name)
+    if success:
+        presets = get_preset_choices()
+        return message, gr.update(choices=presets)
+    else:
+        return message, gr.update(choices=get_preset_choices())
+    
 def get_existing_sessions():
     """
     DB에서 이미 존재하는 모든 session_id 목록을 가져옴 (중복 없이).
@@ -147,37 +269,11 @@ def load_chat_from_db(session_id):
 # 1) 유틸 함수들
 ##########################################
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# 로그 포맷 정의
-formatter = logging.Formatter(
-    fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# 콘솔 핸들러 추가
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# 파일 핸들러 추가 (로테이팅 파일 핸들러 사용)
-log_file = "app.log"  # 원하는 로그 파일 경로로 변경 가능
-rotating_file_handler = RotatingFileHandler(
-    log_file, maxBytes=5*1024*1024, backupCount=5  # 5MB마다 새로운 파일로 교체, 최대 5개 백업
-)
-rotating_file_handler.setFormatter(formatter)
-logger.addHandler(rotating_file_handler)
-
-# 메모리 상에 로드된 모델들을 저장하는 캐시
-LOCAL_MODELS_ROOT = "./models"
-
-def build_model_cache_key(model_id: str, model_type: str, local_path: str = None) -> str:
+def build_model_cache_key(model_id: str, model_type: str, quantization_bit: str = None, local_path: str = None) -> str:
     """
     models_cache에 사용될 key를 구성.
     - 만약 model_id == 'Local (Custom Path)' 이고 local_path가 주어지면 'local::{local_path}'
-    - 그 외에는 'auto::{model_type}::{local_dir}::hf::{model_id}' 형태.
+    - 그 외에는 'auto::{model_type}::{local_dir}::hf::{model_id}::{quantization_bit}' 형태.
     """
     if model_id == "Local (Custom Path)" and local_path:
         return f"local::{local_path}"
@@ -186,7 +282,10 @@ def build_model_cache_key(model_id: str, model_type: str, local_path: str = None
     else:
         local_dirname = make_local_dir_name(model_id)
         local_dirpath = os.path.join("./models", model_type, local_dirname)
-        return f"auto::{model_type}::{local_dirpath}::hf::{model_id}"
+        if quantization_bit:
+            return f"auto::{model_type}::{local_dirpath}::hf::{model_id}::{quantization_bit}"
+        else:
+            return f"auto::{model_type}::{local_dirpath}::hf::{model_id}"
 
 def clear_model_cache(model_id: str, local_path: str = None) -> str:
     """
@@ -292,7 +391,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             local_model_path=local_model_path,
             model_type=model_type
         )
-        models_cache[build_model_cache_key(model_id, model_type, quantization_bit, local_model_path)] = handler
+        cache_key = build_model_cache_key(model_id, model_type, quantization_bit, local_model_path)
+        models_cache[cache_key] = handler
         return handler
     elif model_type == "mlx":
         if "vision" in model_id.lower() or "qwen2-vl" in model_id.lower():
@@ -480,6 +580,28 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
 ##########################################
 # 3) Gradio UI
 ##########################################
+def on_app_start():
+    """
+    Gradio 앱이 로드되면서 실행될 콜백.
+    - 세션 ID를 정하고,
+    - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
+    - 기본 시스템 메시지 불러오기
+    """
+    sid = "demo_session"  # 데모용 세션
+    logger.info(f"앱 시작 시 세션 ID: {sid}")  # 디버깅 로그 추가
+    loaded_history = load_chat_from_db(sid)
+    logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
+
+    # 기본 시스템 메시지 설정 (프리셋이 없는 경우)
+    if not loaded_history:
+        default_system = {
+            "role": "system",
+            "content": system_message_box.value  # 현재 시스템 메시지 박스의 값을 사용
+        }
+        loaded_history = [default_system]
+    return sid, loaded_history
+
+history_state = gr.State([])
 
 with gr.Blocks() as demo:
     gr.Markdown("## 간단한 Chatbot")
@@ -574,7 +696,6 @@ with gr.Blocks() as demo:
                 )
             with gr.Row():
                 status_text = gr.Markdown("", elem_id="status_text")
-        history_state = gr.State([])
         
         # 함수: OpenAI API Key와 사용자 지정 모델 경로 필드의 가시성 제어
         def toggle_api_key_visibility(selected_model):
@@ -640,18 +761,6 @@ with gr.Blocks() as demo:
             inputs=[model_type_dropdown],
             outputs=[model_dropdown]
         )
-        
-        def on_app_start():
-            """
-            Gradio 앱이 로드되면서 실행될 콜백.
-            - 세션 ID를 정하고,
-            - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
-            """
-            sid = "demo_session"  # 데모용 세션
-            logger.info(f"앱 시작 시 세션 ID: {sid}")  # 디버깅 로그 추가
-            loaded_history = load_chat_from_db(sid)
-            logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
-            return sid, loaded_history
         
         # .load()를 사용해, 페이지 로딩시 자동으로 on_app_start()가 실행되도록 연결
         demo.load(
@@ -854,8 +963,8 @@ with gr.Blocks() as demo:
                         "다운로드가 시작되지 않았습니다.",  # download_info
                         gr.Dropdown.update()
                     )
-                    return
-                
+                    return  
+
                 # 모델 유형 결정
                 if "gguf" in repo_id.lower():
                     model_type = "gguf"
@@ -884,7 +993,8 @@ with gr.Blocks() as demo:
                 result = download_model_from_hf(
                     repo_id,
                     target_dir or os.path.join("./models", model_type, make_local_dir_name(repo_id)),
-                    model_type=model_type
+                    model_type=model_type,
+                    token=token if use_auth_val else None
                 )
 
                 # 다운로드 완료 후 UI 업데이트
@@ -905,19 +1015,7 @@ with gr.Blocks() as demo:
                     gr.Dropdown.update()
                 )
 
-        # 이벤트 연결
-        download_mode.change(
-            fn=toggle_download_mode,
-            inputs=download_mode,
-            outputs=[predefined_column, custom_column]
-        )
-        
-        use_auth.change(
-            fn=toggle_auth,
-            inputs=use_auth,
-            outputs=[auth_column]
-        )
-        
+        # Gradio에서 async 함수를 지원하는지 확인 후, 연결
         download_btn.click(
             fn=download_with_progress,
             inputs=[
@@ -933,7 +1031,7 @@ with gr.Blocks() as demo:
                 download_btn,
                 cancel_btn,
                 download_info,
-                model_dropdown  # model_dropdown을 업데이트하도록 변경
+                model_dropdown
             ]
         )
     with gr.Tab("허브"):
@@ -1045,7 +1143,7 @@ with gr.Blocks() as demo:
                     filter_str += f"language_{language.lower()}"
                 if library != "All":
                     filter_str += f"library_{library.lower()}"
-                
+
                 # 모델 검색 수행
                 models = api.list_models(
                     filter=filter_str if filter_str else None,
@@ -1053,21 +1151,21 @@ with gr.Blocks() as demo:
                     sort="lastModified",
                     direction=-1
                 )
-                
+
                 filtered_models = [model for model in models if query.lower() in model.id.lower()]
-                
+
                 # 결과 데이터프레임 구성
-                model_list = []
+                model_list_data = []
                 for model in filtered_models:
                     description = model.cardData.get('description', '') if model.cardData else 'No description available.'
                     short_description = (description[:100] + "...") if len(description) > 100 else description
-                    model_list.append([
+                    model_list_data.append([
                         model.id,
                         short_description,
                         model.downloads,
                         model.likes
                     ])
-                return model_list
+                return model_list_data
             except Exception as e:
                 logger.error(f"모델 검색 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
                 return [["오류 발생", str(e), "", ""]]
@@ -1264,6 +1362,85 @@ with gr.Blocks() as demo:
                 outputs=[custom_model_path_state]
             )
 
+         # 시스템 메시지 프리셋 관리 섹션 추가
+        with gr.Accordion("시스템 메시지 프리셋 관리", open=False):
+            with gr.Row():
+                preset_dropdown = gr.Dropdown(
+                    label="프리셋 선택",
+                    choices=[],  # 초기 로드에서 채워짐
+                    value=None,
+                    interactive=True
+                )
+                apply_preset_btn = gr.Button("프리셋 적용")
+
+            with gr.Row():
+                preset_name = gr.Textbox(
+                    label="새 프리셋 이름",
+                    placeholder="예: 친절한 비서",
+                    interactive=True
+                )
+                preset_content = gr.Textbox(
+                    label="프리셋 내용",
+                    placeholder="프리셋으로 사용할 시스템 메시지를 입력하세요.",
+                    lines=4,
+                    interactive=True
+                )
+
+            with gr.Row():
+                add_preset_btn = gr.Button("프리셋 추가", variant="primary")
+                delete_preset_btn = gr.Button("프리셋 삭제", variant="secondary")
+
+            preset_info = gr.Textbox(
+                label="프리셋 관리 결과",
+                interactive=False
+            )
+
+        # 프리셋 Dropdown 초기화
+        demo.load(
+            fn=initial_load_presets,
+            inputs=[],
+            outputs=[preset_dropdown],
+            queue=False
+        )
+
+        # 프리셋 추가 이벤트 연결
+        add_preset_btn.click(
+            fn=handle_add_preset,
+            inputs=[preset_name, preset_content],
+            outputs=[preset_info, preset_dropdown]
+        )
+
+        # 프리셋 삭제 이벤트 연결
+        delete_preset_btn.click(
+            fn=handle_delete_preset,
+            inputs=[preset_dropdown],
+            outputs=[preset_info, preset_dropdown]
+        )
+
+        # 프리셋 적용 이벤트 수정
+        def apply_preset(name, session_id, history):
+            if not name:
+                return "❌ 적용할 프리셋을 선택해주세요.", history, gr.update()
+            presets = load_system_presets()
+            content = presets.get(name, "")
+            if not content:
+                return "❌ 선택한 프리셋에 내용이 없습니다.", history, gr.update()
+
+            # 현재 세션의 히스토리를 초기화하고 시스템 메시지 추가
+            new_history = [{"role": "system", "content": content}]
+            logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
+            return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content)
+
+        apply_preset_btn.click(
+            fn=apply_preset,
+            inputs=[preset_dropdown, session_id_state, history_state],
+            outputs=[preset_info, history_state, system_message_box]
+        ).then(
+            fn=filter_messages_for_chatbot,
+            inputs=[history_state],
+            outputs=chatbot
+        )
+        
         # 채팅 기록 저장 섹션
         with gr.Accordion("채팅 기록 저장", open=False):
             save_button = gr.Button("채팅 기록 저장", variant="secondary")
@@ -1403,6 +1580,16 @@ with gr.Blocks() as demo:
                 """
                 new_sid = secrets.token_hex(8)  # 새 세션 ID 생성
                 logger.info(f"새 세션 생성됨: {new_sid}")
+                
+                # 기본 시스템 메시지 설정
+                system_message = {
+                    "role": "system",
+                    "content": system_message_box.value  # 현재 시스템 메시지 박스의 값을 사용
+                }
+                
+                # 새 세션에 시스템 메시지 저장
+                save_chat_history_db([system_message], session_id=new_sid)
+                
                 return new_sid, f"새 세션 생성: {new_sid}"
         
             def apply_session(chosen_sid):
