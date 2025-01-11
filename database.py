@@ -119,46 +119,27 @@ def get_existing_sessions():
     except Exception as e:
         logger.error(f"세션 목록 조회 오류: {e}")
         return []
-    
-def save_chat_history_db(history, session_id="session_1"):
-    """
-    채팅 히스토리를 SQLite DB에 저장합니다.
-    """
+
+def save_chat_history_db(history, session_id):
+    if session_id is None:
+        logger.error("세션 ID가 None입니다. 채팅 히스토리를 저장할 수 없습니다.")
+        return
     try:
-        conn = sqlite3.connect("chat_history.db", timeout=10, check_same_thread=False)
+        conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        for msg in history:
+        for message in history:
             cursor.execute("""
-                SELECT COUNT(*) FROM chat_history
-                WHERE session_id = ? AND role = ? AND content = ?
-            """, (session_id, msg.get("role"), msg.get("content")))
-            count = cursor.fetchone()[0]
-
-            if count == 0:
-                cursor.execute("""
-                    INSERT INTO chat_history (session_id, role, content)
-                    VALUES (?, ?, ?)
-                """, (session_id, msg.get("role"), msg.get("content")))
-        
+                INSERT INTO chat_history (session_id, role, content)
+                VALUES (?, ?, ?)
+            """, (session_id, message["role"], message["content"]))
         conn.commit()
         logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
-        return True
-    except sqlite3.OperationalError as e:
-        logger.error(f"DB 작업 중 오류: {e}")
-        return False
+    except sqlite3.IntegrityError as e:
+        logger.error(f"IntegrityError: {e}")
+    except Exception as e:
+        logger.error(f"Error saving chat history to DB: {e}")
     finally:
-        if conn:
-            conn.close()
+        conn.close()
     
 def save_chat_history(history):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

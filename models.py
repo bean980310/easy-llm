@@ -107,11 +107,10 @@ def load_model(selected_model: str, model_type: str, quantization_bit: str = "Q8
 
 def generate_answer(
     history: list,
-    selected_model: str,
-    model_type: str,
+    model_type: str,  # 파라미터 순서 변경
+    selected_model: str = None,  
     local_model_path: str = None,
     image_input: str = None,
-    api_key: str = None,
     device: str = "cpu",
     seed: int = 42
 ) -> str:
@@ -122,6 +121,10 @@ def generate_answer(
     # Seed 설정
     set_seed(seed)
 
+    # history가 None인 경우 처리
+    if history is None:
+        history = []
+
     if not history:
         system_message = {
             "role": "system",
@@ -129,43 +132,23 @@ def generate_answer(
         }
         history = [system_message]
 
+    # selected_model이 None인 경우 model_type에 따라 설정
+    if selected_model is None:
+        selected_model = get_fixed_model_id(model_type)
+
     handler = load_model(selected_model, model_type, local_model_path=local_model_path, device=device)
 
-    if model_type == "api":
-        if not api_key:
-            logger.error("OpenAI API Key가 missing.")
-            return "OpenAI API Key가 필요합니다."
-        openai.api_key = api_key
-        messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
-        logger.info(f"[*] OpenAI API 요청: {messages}")
+    if not handler:
+        logger.error("모델 핸들러가 로드되지 않았습니다.")
+        return "모델 핸들러가 로드되지 않았습니다."
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=selected_model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1024,
-                top_p=0.9
-            )
-            answer = response.choices[0].message["content"]
-            logger.info(f"[*] OpenAI 응답: {answer}")
-            return answer
-        except Exception as e:
-            logger.error(f"OpenAI API 오류: {str(e)}\n\n{traceback.format_exc()}")
-            return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-
-    else:
-        if not handler:
-            logger.error("모델 핸들러가 로드되지 않았습니다.")
-            return "모델 핸들러가 로드되지 않았습니다."
-
-        logger.info(f"[*] Generating answer using {handler.__class__.__name__}")
-        try:
-            answer = handler.generate_answer(history)
-            return answer
-        except Exception as e:
-            logger.error(f"모델 추론 오류: {str(e)}\n\n{traceback.format_exc()}")
-            return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
+    logger.info(f"[*] Generating answer using {handler.__class__.__name__}")
+    try:
+        answer = handler.generate_answer(history)
+        return answer
+    except Exception as e:
+        logger.error(f"모델 추론 오류: {str(e)}\n\n{traceback.format_exc()}")
+        return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
 
 def set_seed(seed: int = 42):
     """
