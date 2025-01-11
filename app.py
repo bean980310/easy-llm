@@ -19,7 +19,7 @@ from utils import (
     clear_all_model_cache
 )
 from database import load_chat_from_db, load_system_presets, initial_load_presets, get_existing_sessions, save_chat_button_click, save_chat_history_csv, save_chat_history_db, handle_add_preset, handle_delete_preset
-from models import default_device, get_all_local_models, get_default_device, generate_answer
+from models import default_device, get_all_local_models, get_default_device, generate_answer, FIXED_MODELS
 from cache import models_cache
 import sqlite3
 
@@ -46,7 +46,7 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
-# Fixed Language Model
+
 fixed_model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 
 # 이미지 파일을 Base64로 인코딩
@@ -244,7 +244,7 @@ with gr.Blocks(css="""
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
         def bot_message(session_id, history, device, seed, model_type):
-            selected_model = FIXED_MODELS.get(model_type, "gguf-model-id")  # 기본값 설정
+            selected_model = FIXED_MODELS.get(model_type, "mlx-community/Qwen2.5-7B-Instruct-4bit")  # 기본값 설정
             local_model_path = None  # No custom path
             
             try:
