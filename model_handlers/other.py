@@ -9,10 +9,11 @@ from utils import get_terminators, make_local_dir_name
 logger = logging.getLogger(__name__)
 
 class OtherModelHandler:
-    def __init__(self, model_id, local_model_path=None, model_type="transformers"):
+    def __init__(self, model_id, local_model_path=None, model_type="transformers", device='cpu'):
         self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None
         self.model = None
+        self.device = device
         self.load_model()
     def load_model(self):
         try:
@@ -22,9 +23,8 @@ class OtherModelHandler:
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_dir,
                 torch_dtype=torch.bfloat16,
-                device_map="auto",
                 trust_remote_code=True
-            )
+            ).to(self.device)
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
             logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")

@@ -8,19 +8,14 @@ from utils import make_local_dir_name
 logger = logging.getLogger(__name__)
 
 class Aya23Handler:
-    def __init__(self, model_id, local_model_path=None, model_type="transformers"):
+    def __init__(self, model_id, local_model_path=None, model_type="transformers", device='cpu'):
         self.model_dir = local_model_path or os.path.join("./models", model_type, make_local_dir_name(model_id))
         self.tokenizer = None
         self.model = None
+        self.device = device
         self.load_model()
 
     def load_model(self):
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
-            device = torch.device("mps")
-        else:
-            device = torch.device("cpu")
         try:
             logger.info(f"[*] Loading tokenizer from {self.model_dir}")
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -37,13 +32,13 @@ class Aya23Handler:
                     self.model_dir,
                     quantization_config=quantization_config,
                     trust_remote_code=True,
-                ).to(device)
+                ).to(self.device)
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_dir,
                     trust_remote_code=True,
                     device_map="auto"
-                ).to(device)
+                ).to(self.device)
             logger.info(f"[*] Model loaded successfully: {self.model_dir}")
         except Exception as e:
             logger.error(f"Failed to load GLM4 Model: {str(e)}\n\n{traceback.format_exc()}")

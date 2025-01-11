@@ -1,5 +1,7 @@
 # app.py
 
+import platform
+import torch
 import os
 import shutil
 import traceback
@@ -58,6 +60,24 @@ logger.addHandler(rotating_file_handler)
 # 메모리 상에 로드된 모델들을 저장하는 캐시
 LOCAL_MODELS_ROOT = "./models"
 
+def get_default_device():
+    """
+    Automatically selects the best available device:
+    - CUDA if NVIDIA GPU is available.
+    - MPS if Apple Silicon (M-Series) is available.
+    - CPU otherwise.
+    """
+    if torch.cuda.is_available():
+        return "cuda"
+    elif platform.system() == "Darwin" and torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+    
+# Set default device
+default_device = get_default_device()
+logger.info(f"Default device set to: {default_device}")
+    
 # DB 초기화 시 시스템 메시지 프리셋 테이블 생성
 def initialize_presets_db():
     try:
@@ -370,11 +390,17 @@ def clear_all_model_cache():
 # 2) 모델 로드 & 추론 로직
 ##########################################
 
-def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_path=None, api_key=None):
+def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_path=None, api_key=None, device="cpu"):
     """
     모델 로드 함수. 특정 모델에 대한 로드 로직을 외부 핸들러로 분리.
     """
     model_id = selected_model
+    if model_type != "transformers" and model_type != "gguf" and model_type != "mlx" and model_type != "api":
+        logger.error(f"지원되지 않는 모델 유형: {model_type}")
+        return None
+    
+    # Pass the device to the handler
+    handler = None
     if model_type not in ["transformers", "gguf", "mlx", "api"]:
         logger.error(f"지원되지 않는 모델 유형: {model_type}")
         return None
@@ -427,7 +453,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = MiniCPMLlama3V25Handler(
                 model_id=model_id,
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -441,7 +468,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = VisionModelHandler(
                 model_id=model_id,
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -453,7 +481,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = GLM4VHandler(
                 model_id=model_id,
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -464,7 +493,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = GLM4Handler(
                 model_id=model_id,
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -475,7 +505,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = GLM4HfHandler(
                 model_id=model_id,  # model_id가 정의되어 있어야 합니다.
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -487,7 +518,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = GLM4HfHandler(
                 model_id=model_id,  # model_id가 정의되어 있어야 합니다.
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -498,7 +530,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = Aya23Handler(
                 model_id=model_id,  # model_id가 정의되어 있어야 합니다.
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -509,7 +542,8 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             handler = QwenHandler(
                 model_id=model_id,  # model_id가 정의되어 있어야 합니다.
                 local_model_path=local_model_path,
-                model_type=model_type
+                model_type=model_type,
+                device=device
             )
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
@@ -517,11 +551,11 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             if not ensure_model_available(model_id, local_model_path, model_type):
                 logger.error(f"모델 '{model_id}'을(를) 다운로드할 수 없습니다.")
                 return None
-            handler = OtherModelHandler(model_id, local_model_path=local_model_path, model_type=model_type)
+            handler = OtherModelHandler(model_id, local_model_path=local_model_path, model_type=model_type,device=device)
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
 
-def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None):
+def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None, device="cpu"):
     """
     사용자 히스토리를 기반으로 답변 생성.
     """
@@ -561,7 +595,7 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
     else:
         if not handler:
             logger.info(f"[*] 모델 로드 중: {selected_model}")
-            handler = load_model(selected_model, model_type, local_model_path=local_model_path)
+            handler = load_model(selected_model, model_type, local_model_path=local_model_path, device=device)
         
         if not handler:
             logger.error("모델 핸들러가 로드되지 않았습니다.")
@@ -652,6 +686,7 @@ with gr.Blocks() as demo:
         value="당신은 유용한 AI 비서입니다.",
         placeholder="대화의 성격, 말투 등을 정의하세요."
     )
+    selected_device_state = gr.State(default_device)
         
     with gr.Tab("메인"):
         
@@ -783,7 +818,7 @@ with gr.Blocks() as demo:
             history.append({"role": "user", "content": user_input})
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
-        def bot_message(session_id, history, selected_model, custom_path, image, api_key):
+        def bot_message(session_id, history, selected_model, custom_path, image, api_key, device):
             # 모델 유형 결정
             local_model_path = None
             if selected_model in api_models:
@@ -806,7 +841,7 @@ with gr.Blocks() as demo:
                 local_model_path = None  # 기본 로컬 경로 사용
                 
             try:
-                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key)
+                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device)
             except Exception as e:
                 answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
                 
@@ -824,6 +859,8 @@ with gr.Blocks() as demo:
                     messages_for_chatbot.append({"role": msg["role"], "content": content})
             return messages_for_chatbot
 
+        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state]
+        
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,
@@ -832,7 +869,7 @@ with gr.Blocks() as demo:
             queue=False
         ).then(
             fn=bot_message,
-            inputs=[session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
+            inputs=bot_message_inputs,
             outputs=[history_state, status_text],
             queue=True
         ).then(
@@ -848,7 +885,7 @@ with gr.Blocks() as demo:
             queue=False
         ).then(
             fn=bot_message,
-            inputs=[session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
+            inputs=bot_message_inputs,
             outputs=[history_state, status_text],
             queue=True
         ).then(
@@ -1690,6 +1727,49 @@ with gr.Blocks() as demo:
                 fn=refresh_sessions,  # 세션 삭제 후 목록 새로고침
                 inputs=[],
                 outputs=[existing_sessions_dropdown, session_manage_info]
+            )
+        with gr.Accordion("장치 설정", open=False):
+            device_dropdown = gr.Dropdown(
+                label="사용할 장치 선택",
+                choices=["Auto (Recommended)", "CPU", "GPU"],
+                value="Auto (Recommended)",
+                info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
+            )
+            device_info = gr.Textbox(
+                label="장치 정보",
+                value=f"현재 기본 장치: {default_device.upper()}",
+                interactive=False
+            )
+            def set_device(selection):
+                """
+                Sets the device based on user selection.
+                - Auto: Automatically detect the best device.
+                - CPU: Force CPU usage.
+                - GPU: Detect and use CUDA or MPS based on available hardware.
+                """
+                if selection == "Auto (Recommended)":
+                    device = get_default_device()
+                elif selection == "CPU":
+                    device = "cpu"
+                elif selection == "GPU":
+                    if torch.cuda.is_available():
+                        device = "cuda"
+                    elif platform.system() == "Darwin" and torch.backends.mps.is_available():
+                        device = "mps"
+                    else:
+                        return gr.update(value="❌ GPU가 감지되지 않았습니다. CPU로 전환됩니다."), "cpu"
+                else:
+                    device = "cpu"
+                
+                device_info_message = f"선택된 장치: {device.upper()}"
+                logger.info(device_info_message)
+                return gr.update(value=device_info_message), device
+            
+            device_dropdown.change(
+                fn=set_device,
+                inputs=[device_dropdown],
+                outputs=[device_info, gr.State(default_device)],
+                queue=False
             )
 
 demo.launch(debug=True, inbrowser=True, server_port=7861, width=500)
