@@ -14,6 +14,10 @@ from model_handlers import (
     GGUFModelHandler,MiniCPMLlama3V25Handler, GLM4Handler, GLM4VHandler, VisionModelHandler,
     Aya23Handler, GLM4HfHandler, OtherModelHandler, QwenHandler, MlxModelHandler, MlxVisionHandler
 )
+import json
+import datetime
+import csv
+import secrets
 from huggingface_hub import HfApi, list_models
 from utils import (
     make_local_dir_name,
@@ -25,8 +29,109 @@ from utils import (
     convert_and_save,
     
 )
-from cache import models_cache 
+from cache import models_cache
+import sqlite3
 
+def get_existing_sessions():
+    """
+    DB에서 이미 존재하는 모든 session_id 목록을 가져옴 (중복 없이).
+    """
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT session_id FROM chat_history ORDER BY session_id ASC")
+        rows = cursor.fetchall()
+        conn.close()
+        session_ids = [r[0] for r in rows]
+        return session_ids
+    except Exception as e:
+        logger.error(f"세션 목록 조회 오류: {e}")
+        return []
+def save_chat_history_db(history, session_id="session_1"):
+    """
+    채팅 히스토리를 SQLite DB에 저장합니다.
+    """
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        for msg in history:
+            cursor.execute("""
+                INSERT INTO chat_history (session_id, role, content)
+                VALUES (?, ?, ?)
+            """, (session_id, msg.get("role"), msg.get("content")))
+        
+        conn.commit()
+        conn.close()
+        logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
+        return True
+    except Exception as e:
+        logger.error(f"DB 저장 중 오류: {e}")
+        return False
+    
+def save_chat_history(history):
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"chat_history_{timestamp}.json"
+    try:
+        with open(file_name, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        logger.info(f"채팅 히스토리 저장 완료: {file_name}")
+        return file_name
+    except Exception as e:
+        logger.error(f"채팅 히스토리 저장 중 오류: {e}")
+        return None
+
+def save_chat_history_csv(history):
+    """
+    채팅 히스토리를 CSV 형태로 저장
+    """
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"chat_history_{timestamp}.csv"
+    try:
+        # CSV 파일 열기
+        with open(file_name, "w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+            # 헤더 작성
+            writer.writerow(["role", "content"])
+            # 각 메시지 row 작성
+            for msg in history:
+                writer.writerow([msg.get("role"), msg.get("content")])
+        logger.info(f"채팅 히스토리 CSV 저장 완료: {file_name}")
+        return file_name
+    except Exception as e:
+        logger.error(f"채팅 히스토리 CSV 저장 중 오류: {e}")
+        return None
+    
+def save_chat_button_click(history):
+    if not history:
+        return "채팅 이력이 없습니다."
+    saved_path = save_chat_history(history)
+    if saved_path is None:
+        return "❌ 채팅 기록 저장 실패"
+    else:
+        return f"✅ 채팅 기록이 저장되었습니다: {saved_path}"
+    
+# 예: session_id를 함수 인자로 전달받아 DB로부터 해당 세션 데이터만 불러오기
+def load_chat_from_db(session_id):
+    conn = sqlite3.connect("chat_history.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT role, content FROM chat_history WHERE session_id=? ORDER BY id ASC", (session_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    history = []
+    for row in rows:
+        role, content = row
+        history.append({"role": role, "content": content})
+    return history
 
 ##########################################
 # 1) 유틸 함수들
@@ -408,7 +513,7 @@ with gr.Blocks() as demo:
     mlx_local = local_models_data["mlx"]
     
     custom_model_path_state = gr.State("")
-    
+    session_id_state = gr.State(None)
     system_message_box = gr.Textbox(
         label="시스템 메시지",
         value="당신은 유용한 AI 비서입니다.",
@@ -416,6 +521,9 @@ with gr.Blocks() as demo:
     )
         
     with gr.Tab("메인"):
+        
+        history_state = gr.State([])
+        
         initial_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
         initial_choices = list(dict.fromkeys(initial_choices))
         initial_choices = sorted(initial_choices)  # 정렬 추가
@@ -523,6 +631,28 @@ with gr.Blocks() as demo:
             outputs=[model_dropdown]
         )
         
+        def on_app_start():
+            """
+            Gradio 앱이 로드되면서 실행될 콜백.
+            - 세션 ID를 정하고,
+            - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
+            """
+            # 여기서 필요한 테이블 생성 등을 해도 됨
+            # create_table_if_not_exists()  # 필요 시 구현
+            
+            sid = "demo_session"  # 데모용으로 고정. 실제로는 secrets.token_hex() 등을 쓸 수 있음.
+            loaded_history = load_chat_from_db(sid)
+            # 만약 DB에 기록이 없으면 빈 리스트가 반환될 것
+            return sid, loaded_history
+        
+        # .load()를 사용해, 페이지 로딩시 자동으로 on_app_start()가 실행되도록 연결
+        demo.load(
+            fn=on_app_start,
+            inputs=[],
+            outputs=[session_id_state, history_state],
+            queue=False
+        )
+        
         def user_message(user_input, history, system_msg):
             if not user_input.strip():
                 return "", history, ""
@@ -532,10 +662,10 @@ with gr.Blocks() as demo:
                     "content": system_msg
                 }
                 history = [system_message]
-            history = history + [{"role": "user", "content": user_input}]
+            history.append({"role": "user", "content": user_input})
             return "", history, "🤔 답변을 생성하는 중입니다..."
     
-        def bot_message(history, selected_model, custom_path, image, api_key):
+        def bot_message(session_id, history, selected_model, custom_path, image, api_key):
             # 모델 유형 결정
             local_model_path = None
             if selected_model in api_models:
@@ -561,45 +691,46 @@ with gr.Blocks() as demo:
                 answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key)
             except Exception as e:
                 answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-            history = history + [{"role": "assistant", "content": answer}]
+                
+            history.append({"role": "assistant", "content": answer})
+            
+            save_chat_history_db(history, session_id=session_id)
             return history, ""  # 로딩 상태 제거
     
 
         def filter_messages_for_chatbot(history):
-            """system 메시지는 제외하고 user/assistant만 Chatbot으로 보냄"""
             messages_for_chatbot = []
             for msg in history:
                 if msg["role"] in ("user", "assistant"):
-                    # content가 None이면 빈 문자열이라도 넣어줌
-                    content = msg["content"] if msg["content"] is not None else ""
+                    content = msg["content"] or ""
                     messages_for_chatbot.append({"role": msg["role"], "content": content})
             return messages_for_chatbot
 
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,
-            inputs=[msg, history_state, system_message_box],  # 세 번째 파라미터 추가
+            inputs=[msg, session_id_state, history_state, system_message_box],  # 세 번째 파라미터 추가
             outputs=[msg, history_state, status_text],
             queue=False
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
+            inputs=[session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
             outputs=[history_state, status_text],
             queue=True
         ).then(
-            fn=lambda h: h,
-            inputs=history_state,
+            fn=filter_messages_for_chatbot,
+            inputs=[history_state],
             outputs=chatbot,
             queue=False
         )
         send_btn.click(
             fn=user_message,
-            inputs=[msg, history_state, system_message_box],
+            inputs=[msg, session_id_state, history_state, system_message_box],
             outputs=[msg, history_state, status_text],
             queue=False
         ).then(
             fn=bot_message,
-            inputs=[history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
+            inputs=[session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text],
             outputs=[history_state, status_text],
             queue=True
         ).then(
@@ -1104,7 +1235,7 @@ with gr.Blocks() as demo:
         output = gr.Textbox(label="결과")
         
         convert_button.click(fn=convert_and_save, inputs=[model_id, output_dir, push_to_hub, quant_type], outputs=output)
-    with gr.Tab("사용자 지정 모델"):
+    with gr.Tab("설정"):
         gr.Markdown("### 사용자 지정 모델 경로 설정")
         custom_path_text = gr.Textbox(
             label="사용자 지정 모델 경로",
@@ -1120,6 +1251,148 @@ with gr.Blocks() as demo:
             fn=update_custom_path,
             inputs=[custom_path_text],
             outputs=[custom_model_path_state]
+        )
+        gr.Markdown("### 채팅 기록 저장")
+        save_button = gr.Button("채팅 기록 저장", variant="secondary")
+        save_info = gr.Textbox(label="저장 결과", interactive=False)
+        
+        save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
+        save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
+        
+        save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
+        save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
+
+        def save_chat_button_click_csv(history):
+            if not history:
+                return "채팅 이력이 없습니다."
+            saved_path = save_chat_history_csv(history)
+            if saved_path is None:
+                return "❌ 채팅 기록 CSV 저장 실패"
+            else:
+                return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
+            
+        def save_chat_button_click_db(history):
+            if not history:
+                return "채팅 이력이 없습니다."
+            ok = save_chat_history_db(history, session_id="demo_session")
+            if ok:
+                return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
+            else:
+                return "❌ DB 저장 실패"
+
+        save_csv_button.click(
+            fn=save_chat_button_click_csv,
+            inputs=[history_state],
+            outputs=save_csv_info
+        )
+
+        # save_button이 클릭되면 save_chat_button_click 실행
+        save_button.click(
+            fn=save_chat_button_click,
+            inputs=[history_state],
+            outputs=save_info
+        )
+        
+        save_db_button.click(
+            fn=save_chat_button_click_db,
+            inputs=[history_state],
+            outputs=save_db_info
+        )
+        
+        gr.Markdown('### 채팅 히스토리 재로드')
+        
+        upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
+        load_info = gr.Textbox(label="로딩 결과", interactive=False)
+        
+        def load_chat_from_json(json_file):
+            """
+            업로드된 JSON 파일을 파싱하여 history_state에 주입
+            """
+            if not json_file:
+                return [], "파일이 없습니다."
+            try:
+                with open(json_file.name, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, list):
+                    return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
+                # data를 그대로 history_state로 반환
+                return data, "✅ 대화가 로딩되었습니다."
+            except Exception as e:
+                logger.error(f"JSON 로드 오류: {e}")
+                return [], f"❌ 로딩 실패: {e}"
+
+        upload_json.change(
+            fn=load_chat_from_json,
+            inputs=[upload_json],
+            outputs=[history_state, load_info]
+        )
+        gr.Markdown("### 세션 관리")
+        with gr.Row():
+            refresh_sessions_btn = gr.Button("세션 목록 갱신")
+            existing_sessions_dropdown = gr.Dropdown(
+                label="기존 세션 목록",
+                choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
+                value=None,
+                interactive=True
+            )
+        
+        with gr.Row():
+            create_new_session_btn = gr.Button("새 세션 생성")
+            apply_session_btn = gr.Button("세션 적용")
+        
+        session_manage_info = gr.Textbox(
+            label="세션 관리 결과",
+            interactive=False
+        )
+        
+        def refresh_sessions():
+            """
+            세션 목록 갱신: DB에서 세션 ID들을 불러와서 Dropdown에 업데이트
+            """
+            sessions = get_existing_sessions()
+            if not sessions:
+                return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
+            return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
+        
+        def create_new_session():
+            """
+            새 세션 ID를 만든 뒤, session_id_state에 반영
+            """
+            new_sid = secrets.token_hex(8)
+            # 실제로는 DB에 넣을 필요는 없으며, 채팅 최초 저장 시 자동으로 들어갈 것
+            return new_sid, f"새 세션 생성: {new_sid}"
+
+        def apply_session(chosen_sid):
+            """
+            Dropdown에서 선택된 세션 ID로, DB에서 history를 불러오고, session_id_state를 갱신
+            """
+            if not chosen_sid:
+                return [], None, "세션 ID를 선택하세요."
+            loaded_history = load_chat_from_db(chosen_sid)
+            # history_state에 반영하고, session_id_state도 업데이트
+            return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+        
+        # 버튼 이벤트 연결
+        refresh_sessions_btn.click(
+            fn=refresh_sessions,
+            inputs=[],
+            outputs=[existing_sessions_dropdown, session_manage_info]
+        )
+        
+        create_new_session_btn.click(
+            fn=create_new_session,
+            inputs=[],
+            outputs=[session_id_state, session_manage_info]
+        )
+        
+        apply_session_btn.click(
+            fn=apply_session,
+            inputs=[existing_sessions_dropdown],
+            outputs=[history_state, session_id_state, session_manage_info]
+        ).then(
+            fn=filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
+            inputs=[history_state],
+            outputs=chatbot                 # (3) Chatbot 업데이트
         )
 
 demo.launch(debug=True, inbrowser=True, server_port=7861, width=500)
