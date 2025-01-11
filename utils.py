@@ -17,9 +17,11 @@ from huggingface_hub import (
 from llama_cpp import Llama
 from model_converter import convert_model_to_float8, convert_model_to_int8, convert_model_to_int4
 import platform
-
+import gc
+from cache import models_cache
 logger = logging.getLogger(__name__)
 
+LOCAL_MODELS_ROOT = "./models"
 class DownloadTracker:
     """다운로드 진행 상황을 추적하는 클래스"""
     def __init__(self, total_size: int, progress_callback: Optional[Callable] = None):
@@ -285,3 +287,86 @@ def convert_and_save(model_id, output_dir, push_to_hub, quant_type, model_type="
             return "모델 변환에 실패했습니다."
     else:
         return "지원되지 않는 변환 유형입니다."
+    
+def build_model_cache_key(model_id: str, model_type: str, quantization_bit: str = None, local_path: str = None) -> str:
+    """
+    models_cache에 사용될 key를 구성.
+    - 만약 model_id == 'Local (Custom Path)' 이고 local_path가 주어지면 'local::{local_path}'
+    - 그 외에는 'auto::{model_type}::{local_dir}::hf::{model_id}::{quantization_bit}' 형태.
+    """
+    if model_id == "Local (Custom Path)" and local_path:
+        return f"local::{local_path}"
+    elif model_type == "api":
+        return f"api::{model_id}"
+    else:
+        local_dirname = make_local_dir_name(model_id)
+        local_dirpath = os.path.join("./models", model_type, local_dirname)
+        if quantization_bit:
+            return f"auto::{model_type}::{local_dirpath}::hf::{model_id}::{quantization_bit}"
+        else:
+            return f"auto::{model_type}::{local_dirpath}::hf::{model_id}"
+
+def clear_model_cache(model_id: str, local_path: str = None) -> str:
+    """
+    특정 모델에 대한 캐시를 제거 (models_cache에서 해당 key를 삭제).
+    - 만약 해당 key가 없으면 '이미 없음' 메시지 반환
+    - 성공 시 '캐시 삭제 완료' 메시지
+    """
+    # 모델 유형을 결정해야 합니다.
+    if model_id in ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"]:
+        model_type = "api"
+    else:
+        # 로컬 모델의 기본 유형을 transformers로 설정 (필요 시 수정)
+        model_type = "transformers"
+    key = build_model_cache_key(model_id, model_type, local_path)
+    if key in models_cache:
+        del models_cache[key]
+        msg = f"[cache] 모델 캐시 제거: {key}"
+        logger.info(msg)
+        return msg
+    else:
+        msg = f"[cache] 이미 캐시에 없거나, 로드된 적 없음: {key}"
+        logger.info(msg)
+        return msg
+
+def clear_all_model_cache():
+    """
+    현재 메모리에 로드된 모든 모델 캐시(models_cache)를 한 번에 삭제.
+    필요하다면, 로컬 폴더의 .cache들도 일괄 삭제할 수 있음.
+    """
+    for key, handler in list(models_cache.items()):
+        # 혹시 model, tokenizer 등 메모리를 점유하는 속성이 있으면 제거
+        if hasattr(handler, "model"):
+            del handler.model
+        if hasattr(handler, "tokenizer"):
+            del handler.tokenizer
+        # 필요 시 handler 내부의 다른 자원들(예: embeddings 등)도 정리
+        
+    # 1) 메모리 캐시 전부 삭제
+    count = len(models_cache)
+    models_cache.clear()
+    logger.info(f"[*] 메모리 캐시 삭제: {count}개 모델")
+
+    # 2) (선택) 로컬 폴더 .cache 삭제
+    #    예: ./models/*/.cache 폴더 전부 삭제
+    #    원치 않으면 주석처리
+    
+    
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+        
+    gc.collect()
+        
+    cache_deleted = 0
+    for subdir, models in get_all_local_models().items():
+        for folder in models:
+            folder_path = os.path.join(LOCAL_MODELS_ROOT, subdir, folder)
+            if os.path.isdir(folder_path):
+                cache_path = os.path.join(folder_path, ".cache")
+                if os.path.isdir(cache_path):
+                    shutil.rmtree(cache_path)
+                    cache_deleted += 1
+    logger.info(f"[*] 로컬 폴더 .cache 삭제: {cache_deleted}개 폴더 삭제")
+    return f"[cache all] {count}개 모델 캐시 삭제 완료. 로컬 폴더 .cache {cache_deleted}개 삭제."
