@@ -47,12 +47,13 @@ def get_existing_sessions():
     except Exception as e:
         logger.error(f"세션 목록 조회 오류: {e}")
         return []
+    
 def save_chat_history_db(history, session_id="session_1"):
     """
     채팅 히스토리를 SQLite DB에 저장합니다.
     """
     try:
-        conn = sqlite3.connect("chat_history.db")
+        conn = sqlite3.connect("chat_history.db", timeout=10, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS chat_history (
@@ -63,20 +64,29 @@ def save_chat_history_db(history, session_id="session_1"):
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         for msg in history:
             cursor.execute("""
-                INSERT INTO chat_history (session_id, role, content)
-                VALUES (?, ?, ?)
+                SELECT COUNT(*) FROM chat_history
+                WHERE session_id = ? AND role = ? AND content = ?
             """, (session_id, msg.get("role"), msg.get("content")))
+            count = cursor.fetchone()[0]
+
+            if count == 0:
+                cursor.execute("""
+                    INSERT INTO chat_history (session_id, role, content)
+                    VALUES (?, ?, ?)
+                """, (session_id, msg.get("role"), msg.get("content")))
         
         conn.commit()
-        conn.close()
         logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
         return True
-    except Exception as e:
-        logger.error(f"DB 저장 중 오류: {e}")
+    except sqlite3.OperationalError as e:
+        logger.error(f"DB 작업 중 오류: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
     
 def save_chat_history(history):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -637,12 +647,10 @@ with gr.Blocks() as demo:
             - 세션 ID를 정하고,
             - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
             """
-            # 여기서 필요한 테이블 생성 등을 해도 됨
-            # create_table_if_not_exists()  # 필요 시 구현
-            
-            sid = "demo_session"  # 데모용으로 고정. 실제로는 secrets.token_hex() 등을 쓸 수 있음.
+            sid = "demo_session"  # 데모용 세션
+            logger.info(f"앱 시작 시 세션 ID: {sid}")  # 디버깅 로그 추가
             loaded_history = load_chat_from_db(sid)
-            # 만약 DB에 기록이 없으면 빈 리스트가 반환될 것
+            logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
             return sid, loaded_history
         
         # .load()를 사용해, 페이지 로딩시 자동으로 on_app_start()가 실행되도록 연결
@@ -1236,163 +1244,264 @@ with gr.Blocks() as demo:
         
         convert_button.click(fn=convert_and_save, inputs=[model_id, output_dir, push_to_hub, quant_type], outputs=output)
     with gr.Tab("설정"):
-        gr.Markdown("### 사용자 지정 모델 경로 설정")
-        custom_path_text = gr.Textbox(
-            label="사용자 지정 모델 경로",
-            placeholder="./models/custom-model",
-        )
-        apply_custom_path_btn = gr.Button("경로 적용")
+        gr.Markdown("### 설정")
 
-        # custom_path_text -> custom_model_path_state 저장
-        def update_custom_path(path):
-            return path
-
-        apply_custom_path_btn.click(
-            fn=update_custom_path,
-            inputs=[custom_path_text],
-            outputs=[custom_model_path_state]
-        )
-        gr.Markdown("### 채팅 기록 저장")
-        save_button = gr.Button("채팅 기록 저장", variant="secondary")
-        save_info = gr.Textbox(label="저장 결과", interactive=False)
-        
-        save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
-        save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
-        
-        save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
-        save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
-
-        def save_chat_button_click_csv(history):
-            if not history:
-                return "채팅 이력이 없습니다."
-            saved_path = save_chat_history_csv(history)
-            if saved_path is None:
-                return "❌ 채팅 기록 CSV 저장 실패"
-            else:
-                return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
-            
-        def save_chat_button_click_db(history):
-            if not history:
-                return "채팅 이력이 없습니다."
-            ok = save_chat_history_db(history, session_id="demo_session")
-            if ok:
-                return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
-            else:
-                return "❌ DB 저장 실패"
-
-        save_csv_button.click(
-            fn=save_chat_button_click_csv,
-            inputs=[history_state],
-            outputs=save_csv_info
-        )
-
-        # save_button이 클릭되면 save_chat_button_click 실행
-        save_button.click(
-            fn=save_chat_button_click,
-            inputs=[history_state],
-            outputs=save_info
-        )
-        
-        save_db_button.click(
-            fn=save_chat_button_click_db,
-            inputs=[history_state],
-            outputs=save_db_info
-        )
-        
-        gr.Markdown('### 채팅 히스토리 재로드')
-        
-        upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
-        load_info = gr.Textbox(label="로딩 결과", interactive=False)
-        
-        def load_chat_from_json(json_file):
-            """
-            업로드된 JSON 파일을 파싱하여 history_state에 주입
-            """
-            if not json_file:
-                return [], "파일이 없습니다."
-            try:
-                with open(json_file.name, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if not isinstance(data, list):
-                    return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
-                # data를 그대로 history_state로 반환
-                return data, "✅ 대화가 로딩되었습니다."
-            except Exception as e:
-                logger.error(f"JSON 로드 오류: {e}")
-                return [], f"❌ 로딩 실패: {e}"
-
-        upload_json.change(
-            fn=load_chat_from_json,
-            inputs=[upload_json],
-            outputs=[history_state, load_info]
-        )
-        gr.Markdown("### 세션 관리")
-        with gr.Row():
-            refresh_sessions_btn = gr.Button("세션 목록 갱신")
-            existing_sessions_dropdown = gr.Dropdown(
-                label="기존 세션 목록",
-                choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
-                value=None,
-                interactive=True
+        # 사용자 지정 모델 경로 설정 섹션
+        with gr.Accordion("사용자 지정 모델 경로 설정", open=False):
+            custom_path_text = gr.Textbox(
+                label="사용자 지정 모델 경로",
+                placeholder="./models/custom-model",
             )
-        
-        with gr.Row():
-            create_new_session_btn = gr.Button("새 세션 생성")
-            apply_session_btn = gr.Button("세션 적용")
-        
-        session_manage_info = gr.Textbox(
-            label="세션 관리 결과",
-            interactive=False
-        )
-        
-        def refresh_sessions():
-            """
-            세션 목록 갱신: DB에서 세션 ID들을 불러와서 Dropdown에 업데이트
-            """
-            sessions = get_existing_sessions()
-            if not sessions:
-                return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
-            return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
-        
-        def create_new_session():
-            """
-            새 세션 ID를 만든 뒤, session_id_state에 반영
-            """
-            new_sid = secrets.token_hex(8)
-            # 실제로는 DB에 넣을 필요는 없으며, 채팅 최초 저장 시 자동으로 들어갈 것
-            return new_sid, f"새 세션 생성: {new_sid}"
+            apply_custom_path_btn = gr.Button("경로 적용")
 
-        def apply_session(chosen_sid):
-            """
-            Dropdown에서 선택된 세션 ID로, DB에서 history를 불러오고, session_id_state를 갱신
-            """
-            if not chosen_sid:
-                return [], None, "세션 ID를 선택하세요."
-            loaded_history = load_chat_from_db(chosen_sid)
-            # history_state에 반영하고, session_id_state도 업데이트
-            return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+            # custom_path_text -> custom_model_path_state 저장
+            def update_custom_path(path):
+                return path
+
+            apply_custom_path_btn.click(
+                fn=update_custom_path,
+                inputs=[custom_path_text],
+                outputs=[custom_model_path_state]
+            )
+
+        # 채팅 기록 저장 섹션
+        with gr.Accordion("채팅 기록 저장", open=False):
+            save_button = gr.Button("채팅 기록 저장", variant="secondary")
+            save_info = gr.Textbox(label="저장 결과", interactive=False)
+
+            save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
+            save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
+
+            save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
+            save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
+
+            def save_chat_button_click_csv(history):
+                if not history:
+                    return "채팅 이력이 없습니다."
+                saved_path = save_chat_history_csv(history)
+                if saved_path is None:
+                    return "❌ 채팅 기록 CSV 저장 실패"
+                else:
+                    return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
+                
+            def save_chat_button_click_db(history):
+                if not history:
+                    return "채팅 이력이 없습니다."
+                ok = save_chat_history_db(history, session_id="demo_session")
+                if ok:
+                    return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
+                else:
+                    return "❌ DB 저장 실패"
+
+            save_csv_button.click(
+                fn=save_chat_button_click_csv,
+                inputs=[history_state],
+                outputs=save_csv_info
+            )
+
+            # save_button이 클릭되면 save_chat_button_click 실행
+            save_button.click(
+                fn=save_chat_button_click,
+                inputs=[history_state],
+                outputs=save_info
+            )
+            
+            save_db_button.click(
+                fn=save_chat_button_click_db,
+                inputs=[history_state],
+                outputs=save_db_info
+            )
+
+        # 채팅 히스토리 재로드 섹션
+        with gr.Accordion("채팅 히스토리 재로드", open=False):
+            upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
+            load_info = gr.Textbox(label="로딩 결과", interactive=False)
+            
+            def load_chat_from_json(json_file):
+                """
+                업로드된 JSON 파일을 파싱하여 history_state에 주입
+                """
+                if not json_file:
+                    return [], "파일이 없습니다."
+                try:
+                    with open(json_file.name, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if not isinstance(data, list):
+                        return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
+                    # data를 그대로 history_state로 반환
+                    return data, "✅ 대화가 로딩되었습니다."
+                except Exception as e:
+                    logger.error(f"JSON 로드 오류: {e}")
+                    return [], f"❌ 로딩 실패: {e}"
+
+            upload_json.change(
+                fn=load_chat_from_json,
+                inputs=[upload_json],
+                outputs=[history_state, load_info]
+            )
+
+        # 세션 관리 섹션
+        with gr.Accordion("세션 관리", open=False):
+            gr.Markdown("### 세션 관리")
+            with gr.Row():
+                refresh_sessions_btn = gr.Button("세션 목록 갱신")
+                existing_sessions_dropdown = gr.Dropdown(
+                    label="기존 세션 목록",
+                    choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
+                    value=None,
+                    interactive=True
+                )
+            
+            with gr.Row():
+                create_new_session_btn = gr.Button("새 세션 생성")
+                apply_session_btn = gr.Button("세션 적용")
+                delete_session_btn = gr.Button("세션 삭제")
+            
+            # 삭제 확인을 위한 컴포넌트 추가
+            confirm_delete_checkbox = gr.Checkbox(
+                label="정말로 이 세션을 삭제하시겠습니까?",
+                value=False,
+                interactive=True,
+                visible=False  # 기본적으로 숨김
+            )
+            confirm_delete_btn = gr.Button(
+                "삭제 확인",
+                variant="stop",
+                visible=False  # 기본적으로 숨김
+            )
+            
+            session_manage_info = gr.Textbox(
+                label="세션 관리 결과",
+                interactive=False
+            )
+            
+            current_session_display = gr.Textbox(
+                label="현재 세션 ID",
+                value="",
+                interactive=False
+            )
+
+            session_id_state.change(
+                fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
+                inputs=[session_id_state],
+                outputs=[current_session_display]
+            )
+            
+            def refresh_sessions():
+                """
+                세션 목록 갱신: DB에서 세션 ID들을 불러와서 Dropdown에 업데이트
+                """
+                sessions = get_existing_sessions()
+                logger.info(f"가져온 세션 목록: {sessions}")  # 디버깅용 로그 추가
+                if not sessions:
+                    return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
+                return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
+            
+            def create_new_session():
+                """
+                새 세션 ID를 생성하고 session_id_state에 반영.
+                """
+                new_sid = secrets.token_hex(8)  # 새 세션 ID 생성
+                logger.info(f"새 세션 생성됨: {new_sid}")
+                return new_sid, f"새 세션 생성: {new_sid}"
         
-        # 버튼 이벤트 연결
-        refresh_sessions_btn.click(
-            fn=refresh_sessions,
-            inputs=[],
-            outputs=[existing_sessions_dropdown, session_manage_info]
-        )
-        
-        create_new_session_btn.click(
-            fn=create_new_session,
-            inputs=[],
-            outputs=[session_id_state, session_manage_info]
-        )
-        
-        apply_session_btn.click(
-            fn=apply_session,
-            inputs=[existing_sessions_dropdown],
-            outputs=[history_state, session_id_state, session_manage_info]
-        ).then(
-            fn=filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
-            inputs=[history_state],
-            outputs=chatbot                 # (3) Chatbot 업데이트
-        )
+            def apply_session(chosen_sid):
+                """
+                Dropdown에서 선택된 세션 ID로, DB에서 history를 불러오고, session_id_state를 갱신
+                """
+                if not chosen_sid:
+                    return [], None, "세션 ID를 선택하세요."
+                loaded_history = load_chat_from_db(chosen_sid)
+                logger.info(f"불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
+                # history_state에 반영하고, session_id_state도 업데이트
+                return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+            def delete_session(chosen_sid, current_sid):
+                """
+                선택된 세션을 DB에서 삭제합니다.
+                현재 활성 세션은 삭제할 수 없습니다.
+                """
+                if not chosen_sid:
+                    return "❌ 삭제할 세션을 선택하세요.", False, gr.update()
+                
+                if chosen_sid == current_sid:
+                    return "❌ 현재 활성 세션은 삭제할 수 없습니다.", False, gr.update()
+                
+                try:
+                    conn = sqlite3.connect("chat_history.db")
+                    cursor = conn.cursor()
+                    # 삭제하기 전에 세션이 존재하는지 확인
+                    cursor.execute("SELECT COUNT(*) FROM chat_history WHERE session_id = ?", (chosen_sid,))
+                    count = cursor.fetchone()[0]
+                    if count == 0:
+                        return f"❌ 세션 '{chosen_sid}'이(가) DB에 존재하지 않습니다.", False, gr.update(visible=False)
+                    
+                    cursor.execute("DELETE FROM chat_history WHERE session_id = ?", (chosen_sid,))
+                    conn.commit()
+                    conn.close()
+                    logger.info(f"세션 삭제 완료: {chosen_sid}")
+                    return f"✅ 세션 '{chosen_sid}'이(가) 삭제되었습니다.", False, gr.update(visible=False)
+                except sqlite3.OperationalError as oe:
+                    logger.error(f"DB 운영 오류: {oe}")
+                    return f"❌ DB 운영 오류 발생: {oe}", False, gr.update(visible=False)
+                except Exception as e:
+                    logger.error(f"세션 삭제 오류: {e}")
+                    return f"❌ 세션 삭제 실패: {e}", False, gr.update(visible=False)
+            
+            # 버튼 이벤트 연결
+            def initiate_delete():
+                return gr.update(visible=True), gr.update(visible=True)
+            
+            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            def confirm_delete(chosen_sid, current_sid, confirm):
+                if not confirm:
+                    return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
+                return delete_session(chosen_sid, current_sid)
+    
+            refresh_sessions_btn.click(
+                fn=refresh_sessions,
+                inputs=[],
+                outputs=[existing_sessions_dropdown, session_manage_info]
+            )
+            
+            create_new_session_btn.click(
+                fn=create_new_session,
+                inputs=[],
+                outputs=[session_id_state, session_manage_info]
+            ).then(
+                fn=lambda: [],  # 새 세션 생성 시 히스토리 초기화
+                inputs=[],
+                outputs=[history_state]
+            ).then(
+                fn=filter_messages_for_chatbot,  # 초기화된 히스토리를 Chatbot에 반영
+                inputs=[history_state],
+                outputs=[chatbot]
+            )
+            
+            apply_session_btn.click(
+                fn=apply_session,
+                inputs=[existing_sessions_dropdown],
+                outputs=[history_state, session_id_state, session_manage_info]
+            ).then(
+                fn=filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
+                inputs=[history_state],
+                outputs=chatbot                 # (3) Chatbot 업데이트
+            )
+            
+            delete_session_btn.click(
+                fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+                inputs=[],
+                outputs=[confirm_delete_checkbox, confirm_delete_btn]
+            )
+            
+            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            confirm_delete_btn.click(
+                fn=confirm_delete,
+                inputs=[existing_sessions_dropdown, session_id_state, confirm_delete_checkbox],
+                outputs=[session_manage_info, confirm_delete_checkbox, confirm_delete_btn]
+            ).then(
+                fn=refresh_sessions,  # 세션 삭제 후 목록 새로고침
+                inputs=[],
+                outputs=[existing_sessions_dropdown, session_manage_info]
+            )
 
 demo.launch(debug=True, inbrowser=True, server_port=7861, width=500)
