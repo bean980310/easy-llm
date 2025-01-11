@@ -121,6 +121,14 @@ def clear_all_model_cache():
     # 2) (선택) 로컬 폴더 .cache 삭제
     #    예: ./models/*/.cache 폴더 전부 삭제
     #    원치 않으면 주석처리
+    
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+    else:
+        pass
+        
     cache_deleted = 0
     for subdir, models in get_all_local_models().items():
         for folder in models:
