@@ -187,7 +187,7 @@ with gr.Blocks() as demo:
     title=gr.Markdown(f"## {_('main_title')}")
     language_dropdown = gr.Dropdown(
         label=_('language_select'),
-        choices=["한국어", "日本語", "中文(简体)", "中文(繁體)", "English"],
+        choices=["한국어", "English", "日本語", "中文(简体)", "中文(繁體)"],
         value=translation_manager.get_language_display_name(default_language),
         interactive=True,
         info=_('language_info')
