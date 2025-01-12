@@ -9,6 +9,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 class TranslationManager:
+    
+    LANGUAGE_NAMES = {
+        'ko': '한국어',
+        'en': 'English',
+        'ja': '日本語',
+        'zh_CN': '简体中文',
+        'zh_TW': '繁體中文'
+    }
+    
     def __init__(self, default_language: str = 'ko'):
         self.default_language = default_language
         self.current_language = default_language

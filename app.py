@@ -127,11 +127,19 @@ def on_app_start():
 history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
+LANGUAGE_NAMES = {
+    'ko': '한국어',
+    'en': 'English',
+    'ja': '日本語',
+    'zh_CN': '简体中文',
+    'zh_TW': '繁體中文'
+}
+
 with gr.Blocks() as demo:
     title=gr.Markdown(f"## {_('main_title')}")
     language_dropdown = gr.Dropdown(
         label="Language / 언어 / 言語 / 语言 / 語言",
-        choices=translation_manager.get_available_languages(),
+        choices={code: translation_manager.LANGUAGE_NAMES[code] for code in translation_manager.get_available_languages()},
         value=translation_manager.current_language
     )
     
