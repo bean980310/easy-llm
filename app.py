@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 import json
 import secrets
 from huggingface_hub import HfApi
+import sqlite3
 from utils import (
     make_local_dir_name,
     get_all_local_models,  # 수정된 함수
@@ -32,7 +33,7 @@ from database import (
     get_preset_choices)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
-import sqlite3
+from translations import translation_manager, _
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -127,18 +128,24 @@ history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
 with gr.Blocks() as demo:
-    gr.Markdown("## 간단한 Chatbot")
+    gr.Markdown(f"## {_("main_title")}")
+    
+    language_dropdown = gr.Dropdown(
+        label="Language / 언어 / 言語 / 语言 / 語言",
+        choices=translation_manager.get_available_languages(),
+        value=translation_manager.current_language
+    )
     
     custom_model_path_state = gr.State("")
     session_id_state = gr.State(None)
     system_message_box = gr.Textbox(
-        label="시스템 메시지",
-        value="당신은 유용한 AI 비서입니다.",
-        placeholder="대화의 성격, 말투 등을 정의하세요."
+        label=_("system_message"),
+        value=_("system_message_default"),
+        placeholder=_("system_message_placeholder")
     )
     selected_device_state = gr.State(default_device)
         
-    with gr.Tab("메인"):
+    with gr.Tab(_("tab_main")):
         
         history_state = gr.State([])
         
@@ -148,35 +155,35 @@ with gr.Blocks() as demo:
         
         with gr.Row():
             model_type_dropdown = gr.Radio(
-                label="모델 유형 선택",
+                label=_("model_type_label"),
                 choices=["all", "transformers", "gguf", "mlx"],
                 value="all",
             )
         
         model_dropdown = gr.Dropdown(
-            label="모델 선택",
+            label=_("model_select_label"),
             choices=initial_choices,
             value=initial_choices[0] if len(initial_choices) > 0 else None,
         )
         
         api_key_text = gr.Textbox(
-            label="OpenAI API Key",
+            label=_("api_key_label"),
             placeholder="sk-...",
             visible=False  # 기본적으로 숨김
         )
         image_info = gr.Markdown("", visible=False)
         with gr.Column():
             with gr.Row():
-                image_input = gr.Image(label="이미지 업로드 (선택)", type="pil", visible=False)
+                image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
             with gr.Row():
                 msg = gr.Textbox(
-                    label="메시지 입력",
-                    placeholder="메시지를 입력하세요...",
+                    label=_("message_input_label"),
+                    placeholder=_("message_placeholder"),
                     scale=9
                 )
                 send_btn = gr.Button(
-                    "전송",
+                    _("send_button"),
                     scale=1,
                     variant="primary"
                 )
@@ -184,12 +191,12 @@ with gr.Blocks() as demo:
                 status_text = gr.Markdown("", elem_id="status_text")
             with gr.Row():
                 seed_input = gr.Number(
-                    label="시드 값",
+                    label=_("seed_label"),
                     value=42,
                     precision=0,
                     step=1,
                     interactive=True,
-                    info="모델의 예측을 재현 가능하게 하기 위해 시드를 설정하세요."
+                    info=_("seed_info")
                 )
                 
             seed_state = gr.State(42)
