@@ -129,6 +129,61 @@ def on_app_start():
 history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
+        def user_message(user_input, session_id, history, system_msg):
+            if not user_input.strip():
+                return "", history, ""
+            if not history:
+                system_message = {
+                    "role": "system",
+                    "content": system_msg
+                }
+                history = [system_message]
+            history.append({"role": "user", "content": user_input})
+            return "", history, "🤔 답변을 생성하는 중입니다..."
+    
+        def bot_message(session_id, history, selected_model, custom_path, image, api_key, device, seed):
+            # 모델 유형 결정
+            local_model_path = None
+            if selected_model in api_models:
+                model_type = "api"
+                local_model_path = None
+            elif selected_model == "사용자 지정 모델 경로 변경":
+                # 사용자 지정 모델 경로 사용
+                model_type = "transformers"  # 기본 모델 유형 설정, 필요 시 수정
+                local_model_path = custom_path
+            else:
+                # 로컬 모델 유형 결정 (transformers, gguf, mlx)
+                if selected_model in transformers_local:
+                    model_type = "transformers"
+                elif selected_model in gguf_local:
+                    model_type = "gguf"
+                elif selected_model in mlx_local:
+                    model_type = "mlx"
+                else:
+                    model_type = "transformers"  # 기본값
+                local_model_path = None  # 기본 로컬 경로 사용
+                
+            try:
+                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device, seed)
+            except Exception as e:
+                answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
+                
+            history.append({"role": "assistant", "content": answer})
+            
+            save_chat_history_db(history, session_id=session_id)
+            return history, ""  # 로딩 상태 제거
+    
+
+        def filter_messages_for_chatbot(history):
+            messages_for_chatbot = []
+            for msg in history:
+                if msg["role"] in ("user", "assistant"):
+                    content = msg["content"] or ""
+                    messages_for_chatbot.append({"role": msg["role"], "content": content})
+            return messages_for_chatbot
+
+        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
+        
 def init_language_dropdown():
     """언어 선택 드롭다운 초기화"""
     return gr.Dropdown(
@@ -287,61 +342,6 @@ with gr.Blocks() as demo:
             outputs=[session_id_state, history_state],
             queue=False
         )
-        
-        def user_message(user_input, session_id, history, system_msg):
-            if not user_input.strip():
-                return "", history, ""
-            if not history:
-                system_message = {
-                    "role": "system",
-                    "content": system_msg
-                }
-                history = [system_message]
-            history.append({"role": "user", "content": user_input})
-            return "", history, "🤔 답변을 생성하는 중입니다..."
-    
-        def bot_message(session_id, history, selected_model, custom_path, image, api_key, device, seed):
-            # 모델 유형 결정
-            local_model_path = None
-            if selected_model in api_models:
-                model_type = "api"
-                local_model_path = None
-            elif selected_model == "사용자 지정 모델 경로 변경":
-                # 사용자 지정 모델 경로 사용
-                model_type = "transformers"  # 기본 모델 유형 설정, 필요 시 수정
-                local_model_path = custom_path
-            else:
-                # 로컬 모델 유형 결정 (transformers, gguf, mlx)
-                if selected_model in transformers_local:
-                    model_type = "transformers"
-                elif selected_model in gguf_local:
-                    model_type = "gguf"
-                elif selected_model in mlx_local:
-                    model_type = "mlx"
-                else:
-                    model_type = "transformers"  # 기본값
-                local_model_path = None  # 기본 로컬 경로 사용
-                
-            try:
-                answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device, seed)
-            except Exception as e:
-                answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-                
-            history.append({"role": "assistant", "content": answer})
-            
-            save_chat_history_db(history, session_id=session_id)
-            return history, ""  # 로딩 상태 제거
-    
-
-        def filter_messages_for_chatbot(history):
-            messages_for_chatbot = []
-            for msg in history:
-                if msg["role"] in ("user", "assistant"):
-                    content = msg["content"] or ""
-                    messages_for_chatbot.append({"role": msg["role"], "content": content})
-            return messages_for_chatbot
-
-        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
         
         # 메시지 전송 시 함수 연결
         msg.submit(
