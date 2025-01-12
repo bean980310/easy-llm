@@ -33,7 +33,7 @@ from database import (
     get_preset_choices)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
-from translations import translation_manager, _, LanguageManager
+from translations import translation_manager, _
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
