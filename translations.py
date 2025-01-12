@@ -85,6 +85,8 @@ class TranslationManager:
             },
             'en': {
                 'main_title': 'Simple Chatbot',
+                'language_select': 'Select Language',
+                'language_info': 'Choose interface language',
                 'system_message': 'System Message',
                 'system_message_default': 'You are a useful AI assistant.',
                 'system_message_placeholder': 'Define conversation characteristics, tone, etc.',
