@@ -38,7 +38,8 @@ from models import (
 from cache import models_cache
 import sqlite3
 
-from translations import translation_manager, _, detect_system_language, DEFAULT_CHARACTER_SETTINGS, get_system_message
+from translations import translation_manager, _, detect_system_language, get_system_message
+from minami_asuka_char_set import DEFAULT_CHARACTER_SETTINGS
 import i18n
 import locale
 
