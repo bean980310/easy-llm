@@ -136,41 +136,6 @@ def init_language_dropdown():
         interactive=True,
     )
 
-def change_language(display_name: str):
-    """
-    언어 변경 처리
-    
-    Args:
-        display_name: 선택된 언어의 표시 이름
-    """
-    success = translation_manager.set_language(display_name)
-    if not success:
-        return {
-            title: gr.update(),  # 현재 값 유지
-            system_message_box: gr.update(),  # 현재 값 유지
-            error_text: gr.update(value="Failed to change language", visible=True)
-        }
-
-    return {
-        title: gr.update(value=f"## {_('main_title')}"),
-        system_message_box: gr.update(
-            label=_("system_message"),
-            value=_("system_message_default"),
-            placeholder=_("system_message_placeholder")
-        ),
-        model_type_dropdown: gr.update(label=_("model_type_label")),
-        model_dropdown: gr.update(label=_("model_select_label")),
-        api_key_text: gr.update(label=_("api_key_label")),
-        image_input: gr.update(label=_("image_upload_label")),
-        msg: gr.update(
-            label=_("message_input_label"),
-            placeholder=_("message_placeholder")
-        ),
-        send_btn: gr.update(value=_("send_button")),
-        seed_input: gr.update(label=_("seed_label"), info=_("seed_info")),
-        error_text: gr.update(visible=False)
-    }
-
 with gr.Blocks() as demo:
     error_text = gr.Markdown(visible=False) 
     title=gr.Markdown(f"## {_('main_title')}")
@@ -183,7 +148,6 @@ with gr.Blocks() as demo:
         value=_("system_message_default"),
         placeholder=_("system_message_placeholder")
     )
-    error_text= gr.Markdown(visible=False)
     selected_device_state = gr.State(default_device)
         
     with gr.Tab(_("tab_main")):
@@ -410,6 +374,47 @@ with gr.Blocks() as demo:
             outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
         )
+        
+    def change_language(display_name: str):
+        """
+        언어 변경 처리
+        
+        Args:
+            display_name: 선택된 언어의 표시 이름
+        """
+        success = translation_manager.set_language(display_name)
+        if not success:
+            return {
+                "title": gr.update(),  # 현재 값 유지
+                "system_message_box": gr.update(),  # 현재 값 유지
+                "model_type_dropdown": gr.update(),  # 현재 값 유지
+                "model_dropdown": gr.update(),  # 현재 값 유지
+                "api_key_text": gr.update(),  # 현재 값 유지
+                "image_input": gr.update(),  # 현재 값 유지
+                "msg": gr.update(),  # 현재 값 유지
+                "send_btn": gr.update(),  # 현재 값 유지
+                "seed_input": gr.update(),  # 현재 값 유지
+            }
+
+        return {
+            title: gr.update(value=f"## {_('main_title')}"),
+            system_message_box: gr.update(
+                label=_("system_message"),
+                value=_("system_message_default"),
+                placeholder=_("system_message_placeholder")
+            ),
+            model_type_dropdown: gr.update(label=_("model_type_label")),
+            model_dropdown: gr.update(label=_("model_select_label")),
+            api_key_text: gr.update(label=_("api_key_label")),
+            image_input: gr.update(label=_("image_upload_label")),
+            msg: gr.update(
+                label=_("message_input_label"),
+                placeholder=_("message_placeholder")
+            ),
+            send_btn: gr.update(value=_("send_button")),
+            seed_input: gr.update(label=_("seed_label"), info=_("seed_info"))
+        }
+
 
     # 언어 변경 이벤트 연결
     language_dropdown.change(
@@ -425,21 +430,19 @@ with gr.Blocks() as demo:
             image_input,
             msg,
             send_btn,
-            seed_input,
-            error_text
-            # ... 기타 업데이트가 필요한 컴포넌트들
+            seed_input
         ]
     )
     
-    with gr.Tab("다운로드"):
-        gr.Markdown("""### 모델 다운로드
-        HuggingFace에서 모델을 다운로드하고 로컬에 저장합니다. 
-        미리 정의된 모델 목록에서 선택하거나, 커스텀 모델 ID를 직접 입력할 수 있습니다.""")
+    with gr.Tab(_("download_tab")):
+        download_title=gr.Markdown(f"""### {_("download_title")}
+        {_("download_description")}
+        {_("download_description_detail")}""")
         
         with gr.Column():
             # 다운로드 모드 선택 (라디오 버튼)
             download_mode = gr.Radio(
-                label="다운로드 방식 선택",
+                label=_("download_mode_label"),
                 choices=["Predefined", "Custom Repo ID"],
                 value="Predefined",
                 container=True,
@@ -447,34 +450,34 @@ with gr.Blocks() as demo:
             # 모델 선택/입력 영역
             with gr.Column(visible=True) as predefined_column:
                 predefined_dropdown = gr.Dropdown(
-                    label="모델 선택",
+                    label=_("model_select_label"),
                     choices=sorted(known_hf_models),
                     value=known_hf_models[0] if known_hf_models else None,
-                    info="지원되는 모델 목록입니다."
+                    info=_("model_select_info")
                 )
                 
             with gr.Column(visible=False) as custom_column:
                 custom_repo_id_box = gr.Textbox(
                     label="Custom Model ID",
-                    placeholder="예) facebook/opt-350m",
-                    info="HuggingFace의 모델 ID를 입력하세요 (예: organization/model-name)"
+                    placeholder=_("custom_model_id_placeholder"),
+                    info=_("custom_model_id_info")
                 )
                 
             # 다운로드 설정
             with gr.Row():
                 with gr.Column(scale=2):
                     target_path = gr.Textbox(
-                        label="저장 경로",
+                        label=_("save_path_label"),
                         placeholder="./models/my-model",
                         value="",
                         interactive=True,
-                        info="비워두면 자동으로 경로가 생성됩니다."
+                        info=_("save_path_info")
                     )
                 with gr.Column(scale=1):
                     use_auth = gr.Checkbox(
-                        label="인증 필요",
+                        label=_("auth_required_label"),
                         value=False,
-                        info="비공개 또는 gated 모델 다운로드 시 체크"
+                        info=_("auth_required_info")
                     )
             
             with gr.Column(visible=False) as auth_column:
@@ -482,18 +485,18 @@ with gr.Blocks() as demo:
                     label="HuggingFace Token",
                     placeholder="hf_...",
                     type="password",
-                    info="HuggingFace에서 발급받은 토큰을 입력하세요."
+                    info=_("hf_token_info")
                 )
             
             # 다운로드 버튼과 진행 상태
             with gr.Row():
                 download_btn = gr.Button(
-                    "다운로드 시작",
+                    value=_("download_start_button"),
                     variant="primary",
                     scale=2
                 )
                 cancel_btn = gr.Button(
-                    "취소",
+                    value=_("download_cancel_button"),
                     variant="stop",
                     scale=1,
                     interactive=False
@@ -506,9 +509,9 @@ with gr.Blocks() as demo:
             )
             
             # 다운로드 결과와 로그
-            with gr.Accordion("상세 정보", open=False):
+            with gr.Accordion(_("download_details_label"), open=False):
                 download_info = gr.TextArea(
-                    label="다운로드 로그",
+                    label=_("download_log_label"),
                     interactive=False,
                     max_lines=10,
                     autoscroll=True
@@ -521,17 +524,29 @@ with gr.Blocks() as demo:
                 gr.update(visible=(mode == "Predefined")),  # predefined_column
                 gr.update(visible=(mode == "Custom Repo ID"))  # custom_column
             ]
+            
+        download_mode.change(
+            fn=toggle_download_mode,
+            inputs=[download_mode],
+            outputs=[predefined_column, custom_column]
+        )
 
         def toggle_auth(use_auth_val):
             """인증 필요 여부에 따라 토큰 입력창 표시/숨김"""
             return gr.update(visible=use_auth_val)
+        
+        use_auth.change(
+            fn=toggle_auth,
+            inputs=[use_auth],
+            outputs=[auth_column]
+        )
 
         def download_with_progress(mode, predefined_choice, custom_repo, target_dir, use_auth_val, token):
             try:
                 repo_id = predefined_choice if mode == "Predefined" else custom_repo.strip()
                 if not repo_id:
                     yield (
-                        "❌ 모델 ID를 입력해주세요.",  # status
+                        _("download_error_no_model"),  # status
                         gr.update(interactive=True),  # download_btn
                         gr.update(interactive=False),  # cancel_btn
                         "다운로드가 시작되지 않았습니다.",  # download_info
@@ -549,7 +564,7 @@ with gr.Blocks() as demo:
 
                 # 진행 상태 초기화
                 yield (
-                    "🔄 다운로드 준비 중...",
+                    _("download_preparing"),
                     gr.update(interactive=False),
                     gr.update(interactive=True),
                     f"모델: {repo_id}\n준비 중...",
@@ -558,7 +573,7 @@ with gr.Blocks() as demo:
 
                 # 실제 다운로드 수행
                 yield (
-                    "🔄 다운로드 중...",
+                    _("download_in_progress"),
                     gr.update(interactive=False),
                     gr.update(interactive=True),
                     "다운로드를 진행 중입니다...",
@@ -573,7 +588,7 @@ with gr.Blocks() as demo:
 
                 # 다운로드 완료 후 UI 업데이트
                 yield (
-                    "✅ 다운로드 완료!" if "실패" not in result else "❌ 다운로드 실패",
+                    _("download_complete") if "실패" not in result else _("download_failed"),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     result,
@@ -582,7 +597,7 @@ with gr.Blocks() as demo:
 
             except Exception as e:
                 yield (
-                    "❌ 오류 발생",
+                    _("download_error"),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     f"오류: {str(e)}\n\n{traceback.format_exc()}",
@@ -608,6 +623,50 @@ with gr.Blocks() as demo:
                 model_dropdown
             ]
         )
+        
+        def change_language(display_name: str):
+            """
+            언어 변경 처리
+            
+            Args:
+                display_name: 선택된 언어의 표시 이름
+            """
+            success = translation_manager.set_language(display_name)
+            if not success:
+                return {
+                    "download_title": gr.update(),  # 문자열 키로 수정
+                    "download_mode": gr.update(),
+                    "predefined_dropdown": gr.update(),
+                    "custom_repo_id_box": gr.update(),
+                    "target_path": gr.update(),
+                    "use_auth": gr.update(),
+                    "hf_token": gr.update(),
+                    "download_btn": gr.update(),
+                    "cancel_btn": gr.update()
+                }
+
+            return {
+                download_title: gr.update(value=f"""### {_("download_title")}
+                {_("download_description")}
+                {_("download_description_detail")}"""),
+                download_mode: gr.update(label=_("download_mode_label")),
+                predefined_dropdown: gr.update(label=_("model_select_label"), info=_('model_select_info')),
+                custom_repo_id_box: gr.update(
+                    placeholder=_("custom_model_id_placeholder"),
+                    info=_("custom_model_id_info")
+                )
+            }
+        language_dropdown.change(
+            fn=change_language,
+            inputs=[language_dropdown],
+            outputs=[
+                download_title,
+                download_mode,
+                predefined_dropdown,
+                custom_repo_id_box,
+                # ... 기타 업데이트가 필요한 컴포넌트들
+        ]
+    )
     with gr.Tab("허브"):
         gr.Markdown("""### 허깅페이스 허브 모델 검색
         허깅페이스 허브에서 모델을 검색하고 다운로드할 수 있습니다. 
