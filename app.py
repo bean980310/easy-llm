@@ -354,6 +354,8 @@ with gr.Blocks() as demo:
 
             return [
                 gr.update(value=f"## {_('main_title')}"),
+                gr.update(label=_('language_select'),
+                info=_('language_info')),
                 gr.update(
                     label=_("system_message"),
                     value=_("system_message_default"),
@@ -371,15 +373,14 @@ with gr.Blocks() as demo:
                 gr.update(label=_("seed_label"), info=_("seed_info"))
             ]
 
-
         # 언어 변경 이벤트 연결
         language_dropdown.change(
             fn=change_language,
             inputs=[language_dropdown],
             outputs=[
                 title,
+                language_dropdown,
                 system_message_box,
-                error_text,
                 model_type_dropdown,
                 model_dropdown,
                 api_key_text,
