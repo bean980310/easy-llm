@@ -7,57 +7,8 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
-class LanguageManager:
-    """언어 관리를 위한 중앙 집중화된 클래스"""
-    
-    # 언어 코드와 표시 이름 매핑
-    LANGUAGE_MAPPINGS = {
-        'ko': '한국어',
-        'en': 'English',
-        'ja': '日本語',
-        'zh_CN': '中文(简体)',
-        'zh_TW': '中文(繁體)'
-    }
-
-    # 표시 이름으로부터 언어 코드를 찾기 위한 역방향 매핑
-    REVERSE_MAPPINGS = {v: k for k, v in LANGUAGE_MAPPINGS.items()}
-
-    @classmethod
-    def get_display_name(cls, lang_code: str) -> str:
-        """언어 코드에 대한 표시 이름 반환"""
-        return cls.LANGUAGE_MAPPINGS.get(lang_code, lang_code)
-
-    @classmethod
-    def get_language_code(cls, display_name: str) -> Optional[str]:
-        """표시 이름에 대한 언어 코드 반환"""
-        return cls.REVERSE_MAPPINGS.get(display_name)
-
-    @classmethod
-    def get_all_display_names(cls) -> list[str]:
-        """지원되는 모든 언어의 표시 이름 목록 반환"""
-        return list(cls.LANGUAGE_MAPPINGS.values())
-
-    @classmethod
-    def get_all_language_codes(cls) -> list[str]:
-        """지원되는 모든 언어 코드 목록 반환"""
-        return list(cls.LANGUAGE_MAPPINGS.keys())
-
-    @classmethod
-    def is_valid_display_name(cls, display_name: str) -> bool:
-        """유효한 표시 이름인지 확인"""
-        return display_name in cls.REVERSE_MAPPINGS
-
-    @classmethod
-    def is_valid_language_code(cls, lang_code: str) -> bool:
-        """유효한 언어 코드인지 확인"""
-        return lang_code in cls.LANGUAGE_MAPPINGS
-
 class TranslationManager:
     def __init__(self, default_language: str = 'ko'):
-        if not LanguageManager.is_valid_language_code(default_language):
-            logger.warning(f"Invalid default language code: {default_language}, falling back to 'ko'")
-            default_language = 'ko'
-            
         self.default_language = default_language
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
