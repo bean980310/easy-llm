@@ -1,4 +1,4 @@
-DEFAULT_CHARACTER_SETTINGS={
+MINAMI_ASUKA_CHARACTER_PERSONA_SETTINGS={
      "ko": """
     미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
     성별: 여성
