@@ -613,38 +613,29 @@ with gr.Blocks() as demo:
             ]
         )
         
-        def change_language(display_name: str):
-            """
-            언어 변경 처리
+        def change_language(selected_lang: str):
+            """언어 변경 처리 함수"""
+            lang_map = {
+                "한국어": "ko",
+                "日本語": "ja",
+                "中文(简体)": "zh_CN",
+                "中文(繁體)": "zh_TW",
+                "English": "en"
+            }
+            lang_code = lang_map.get(selected_lang, "ko")
+            translation_manager.set_language(lang_code)
             
-            Args:
-                display_name: 선택된 언어의 표시 이름
-            """
-            success = translation_manager.set_language(display_name)
-            if not success:
-                return {
-                    "download_title": gr.update(),  # 문자열 키로 수정
-                    "download_mode": gr.update(),
-                    "predefined_dropdown": gr.update(),
-                    "custom_repo_id_box": gr.update(),
-                    "target_path": gr.update(),
-                    "use_auth": gr.update(),
-                    "hf_token": gr.update(),
-                    "download_btn": gr.update(),
-                    "cancel_btn": gr.update()
-                }
-
-            return {
-                download_title: gr.update(value=f"""### {_("download_title")}
+            return [
+                gr.update(value=f"""### {_("download_title")}
                 {_("download_description")}
                 {_("download_description_detail")}"""),
-                download_mode: gr.update(label=_("download_mode_label")),
-                predefined_dropdown: gr.update(label=_("model_select_label"), info=_('model_select_info')),
-                custom_repo_id_box: gr.update(
+                gr.update(label=_("download_mode_label")),
+                gr.update(label=_("model_select_label"), info=_('model_select_info')),
+                gr.update(
                     placeholder=_("custom_model_id_placeholder"),
                     info=_("custom_model_id_info")
                 )
-            }
+            ]
         language_dropdown.change(
             fn=change_language,
             inputs=[language_dropdown],
