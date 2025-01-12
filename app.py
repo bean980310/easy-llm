@@ -386,7 +386,7 @@ with gr.Blocks() as demo:
         lang_code = lang_map.get(selected_lang, "ko")
         translation_manager.set_language(lang_code)
 
-        return {
+        return [
             gr.update(value=f"## {_('main_title')}"),
             gr.update(
                 label=_("system_message"),
@@ -403,7 +403,7 @@ with gr.Blocks() as demo:
             ),
             gr.update(value=_("send_button")),
             gr.update(label=_("seed_label"), info=_("seed_info"))
-        }
+        ]
 
 
     # 언어 변경 이벤트 연결
