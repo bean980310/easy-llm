@@ -182,20 +182,16 @@ def filter_messages_for_chatbot(history):
             messages_for_chatbot.append({"role": msg["role"], "content": content})
         return messages_for_chatbot
 
-        
-def init_language_dropdown():
-    """언어 선택 드롭다운 초기화"""
-    return gr.Dropdown(
-        label="Language / 언어 / 言語 / 语言 / 語言",
-        choices=LanguageManager.get_all_display_names(),
-        value=LanguageManager.get_display_name(translation_manager.current_language),
-        interactive=True,
-    )
-
 with gr.Blocks() as demo:
     error_text = gr.Markdown(visible=False) 
     title=gr.Markdown(f"## {_('main_title')}")
-    language_dropdown = init_language_dropdown()
+    language_dropdown = gr.Dropdown(
+        label=_('language_select'),
+        choices=["한국어", "日本語", "中文(简体)", "中文(繁體)", "English"],
+        value=translation_manager.get_language_display_name(default_language),
+        interactive=True,
+        info=_('language_info')
+    )
     
     custom_model_path_state = gr.State("")
     session_id_state = gr.State(None)
