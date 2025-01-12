@@ -127,7 +127,8 @@ def on_app_start():
 history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
-with gr.Blocks() as demo:   
+with gr.Blocks() as demo:
+    title=gr.Markdown(f"## {_('main_title')}")
     language_dropdown = gr.Dropdown(
         label="Language / 언어 / 言語 / 语言 / 語言",
         choices=translation_manager.get_available_languages(),
@@ -181,7 +182,7 @@ with gr.Blocks() as demo:
                     scale=9
                 )
                 send_btn = gr.Button(
-                    _("send_button"),
+                    value=_("send_button"),
                     scale=1,
                     variant="primary"
                 )
@@ -372,11 +373,16 @@ with gr.Blocks() as demo:
         translation_manager.set_language(lang)
         # UI 텍스트 업데이트를 위한 딕셔너리 반환
         return {
+            title: gr.update(value=f"## {_('main_title')}"),
             system_message_box: gr.update(label=_("system_message"),value=_("system_message_default"),
         placeholder=_("system_message_placeholder")),
             model_type_dropdown: gr.update(label=_("model_type_label")),
             model_dropdown: gr.update(label=_("model_select_label")),
             api_key_text: gr.update(label=_("api_key_label")),
+            image_input: gr.update(label=_("image_upload_label")),
+            msg: gr.update(label=_("message_input_label"),
+            placeholder=_("message_placeholder")),
+            send_btn: gr.update(value=_("send_button"))
             # ... 기타 UI 요소들의 업데이트
         }
 
@@ -385,10 +391,14 @@ with gr.Blocks() as demo:
         fn=change_language,
         inputs=[language_dropdown],
         outputs=[
+            title,
             system_message_box,
             model_type_dropdown,
             model_dropdown,
             api_key_text,
+            image_input,
+            msg,
+            send_btn
             # ... 기타 업데이트가 필요한 컴포넌트들
         ]
     )
