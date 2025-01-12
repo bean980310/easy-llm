@@ -33,7 +33,7 @@ from database import (
     get_preset_choices)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
-from translations import translation_manager, _
+from translations import translation_manager, _, detect_system_language
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -99,6 +99,8 @@ mlx_local = local_models_data["mlx"]
 generator_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
 generator_choices = list(dict.fromkeys(generator_choices))  # 중복 제거
 generator_choices = sorted(generator_choices)  # 정렬
+
+default_language = detect_system_language()
 
 ##########################################
 # 3) Gradio UI
