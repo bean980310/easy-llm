@@ -275,39 +275,17 @@ class TranslationManager:
                 json.dump(translations, f, ensure_ascii=False, indent=2)
             logger.info(f"Created default translations for {lang}")
 
-    def set_language(self, lang: Union[str, None]) -> bool:
-        """
-        언어 설정 (언어 코드 또는 표시 이름 사용 가능)
-        
-        Args:
-            lang: 언어 코드 또는 표시 이름
-            
-        Returns:
-            bool: 설정 성공 여부
-        """
-        if lang is None:
-            return False
-            
-        # 표시 이름이 입력된 경우 언어 코드로 변환
-        if LanguageManager.is_valid_display_name(lang):
-            lang_code = LanguageManager.get_language_code(lang)
-        else:
-            lang_code = lang
-
-        if not LanguageManager.is_valid_language_code(lang_code):
-            logger.warning(f"Invalid language code or display name: {lang}")
-            return False
-            
-        if lang_code not in self.translations:
-            logger.warning(f"Translations not found for language: {lang_code}")
-            return False
-            
-        self.current_language = lang_code
-        logger.info(f"Language changed to {lang_code}")
-        return True
+    def set_language(self, language_code: str) -> bool:
+        """현재 언어 설정"""
+        if language_code in self.translations:
+            self.current_language = language_code
+            logger.info(f"Language changed to {language_code}")
+            return True
+        logger.warning(f"Language {language_code} not found, using default language")
+        return False
 
     def get(self, key: str, **kwargs) -> str:
-        """번역된 문자열 반환"""
+        """UI 텍스트 번역 가져오기"""
         try:
             translation = self.translations[self.current_language].get(
                 key,
