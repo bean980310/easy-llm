@@ -165,8 +165,7 @@ def process_message(message, session_id, history, system_msg, device, seed_val, 
             history=history,
             model_type=model_type_val,
             device=device,
-            seed=seed_val,
-            language=default_language  # 다국어 지원을 위해 현재 언어 사용
+            seed=seed_val, # 다국어 지원을 위해 현재 언어 사용
         )
         
         # 이미지를 응답에 포함시키지 않음
@@ -182,16 +181,15 @@ def process_message(message, session_id, history, system_msg, device, seed_val, 
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}", exc_info=True)
         return "", history, chatbot_messages, f"❌ 오류 발생: {str(e)}"
-
-history_state = gr.State([])
-overwrite_state = gr.State(False) 
-
-# 단일 history_state와 selected_device_state 정의 (중복 제거)
-session_id_state = gr.State()
-history_state = gr.State([])
-selected_device_state = gr.State(default_device)
-seed_state = gr.State(42)  # 시드 상태 전역 정의
-selected_language_state = gr.State(default_language)
+    
+def update_fixed_model(selected_model_type):
+    """
+    선택된 모델 유형에 따라 fixed_model_display를 업데이트하는 함수
+    """
+    # FIXED_MODELS 딕셔너리에서 선택된 모델 유형에 해당하는 모델 ID를 가져옵니다.
+    model_id = FIXED_MODELS.get(selected_model_type, "default-model-id")
+    logger.info(f"Selected model type: {selected_model_type}, Model ID: {model_id}")
+    return gr.update(value=model_id)
 
 with gr.Blocks(css="""
 #chatbot .message.assistant .message-content {
@@ -204,6 +202,13 @@ with gr.Blocks(css="""
     margin-right: 10px;
 }
 """) as demo:
+    session_id_state = gr.State()
+    history_state = gr.State([])
+    selected_device_state = gr.State(default_device)
+    seed_state = gr.State(42)
+    selected_language_state = gr.State(default_language)
+    overwrite_state = gr.State(False)
+    
     title = gr.Markdown(value=f"## {_('title')}")
     
     # 언어 선택 드롭다운 추가
@@ -235,6 +240,12 @@ with gr.Blocks(css="""
             label=_('selected_model'),
             value=get_fixed_model_id("gguf"),
             interactive=False
+        )
+        
+        model_type.change(
+            fn=update_fixed_model,
+            inputs=[model_type],
+            outputs=[fixed_model_display]
         )
         
         with gr.Row():
@@ -284,55 +295,6 @@ with gr.Blocks(css="""
             outputs=[seed_state]
         )
         
-        def change_language(selected_lang):
-            """언어 변경 처리 함수"""
-            lang_map = {
-                "한국어": "ko",
-                "日本語": "ja",
-                "中文(简体)": "zh_CN",
-                "中文(繁體)": "zh_TW",
-                "English": "en"
-            }
-            lang_code = lang_map.get(selected_lang, "ko")
-            translation_manager.set_language(lang_code)
-            
-            # 시스템 메시지 업데이트
-            system_message = get_system_message()
-            
-            # UI 컴포넌트 업데이트
-            return [
-                gr.update(value=f"## {_('title')}"),
-                gr.update(label=_('language_select'),info=_('language_info')),
-                gr.update(label=_('system_message_label')),
-                gr.update(label=_('select_model')),
-                gr.update(label=_('selected_model')),
-                gr.update(label=_('chatbot_label')),
-                gr.update(label=_('profile_image_label')),
-                gr.update(label=_('input_placeholder'), placeholder=_('input_placeholder')),
-                gr.update(value=_('send_button')),
-                gr.update(label=_('seed_value'),info=_('seed_info')),
-                gr.update(value=system_message),
-            ]
-
-        # 언어 변경 이벤트 연결
-        language_dropdown.change(
-            fn=change_language,
-            inputs=[language_dropdown],
-            outputs=[
-                title,
-                language_dropdown,
-                system_message_display,
-                model_type,
-                fixed_model_display,
-                chatbot,
-                profile_image,
-                msg,
-                send,
-                seed_input,
-                system_message_display
-            ]
-        )
-
          # 이벤트 핸들러 연결
         msg.submit(
             fn=process_message,
@@ -352,6 +314,53 @@ with gr.Blocks(css="""
             inputs=[],
             outputs=[session_id_state, history_state],
             queue=False
+        )
+        
+        def change_language(selected_lang):
+            """언어 변경 처리 함수"""
+            lang_map = {
+                "한국어": "ko",
+                "日本語": "ja",
+                "中文(简体)": "zh_CN",
+                "中文(繁體)": "zh_TW",
+                "English": "en"
+            }
+            lang_code = lang_map.get(selected_lang, "ko")
+            translation_manager.set_language(lang_code)
+            
+            # 시스템 메시지 업데이트
+            system_message = get_system_message()
+            
+            # UI 컴포넌트 업데이트
+            return [
+                gr.update(value=f"## {_('title')}"),
+                gr.update(label=_('language_select'),info=_('language_info')),
+                gr.update(label=_('system_message_label'), value=system_message),
+                gr.update(label=_('select_model')),
+                gr.update(label=_('selected_model')),
+                gr.update(label=_('chatbot_label')),
+                gr.update(label=_('profile_image_label')),
+                gr.update(label=_('input_placeholder'), placeholder=_('input_placeholder')),
+                gr.update(value=_('send_button')),
+                gr.update(label=_('seed_value'),info=_('seed_info')),
+            ]
+
+        # 언어 변경 이벤트 연결
+        language_dropdown.change(
+            fn=change_language,
+            inputs=[language_dropdown],
+            outputs=[
+                title,
+                language_dropdown,
+                system_message_display,
+                model_type,
+                fixed_model_display,
+                chatbot,
+                profile_image,
+                msg,
+                send,
+                seed_input,
+            ]
         )
     
     # "설정" 탭 유지
