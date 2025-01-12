@@ -1,5 +1,6 @@
 # translations.py
 
+import locale
 from typing import Dict, Optional, Union
 import json
 import os
@@ -296,13 +297,39 @@ class TranslationManager:
             logger.error(f"Translation error for key '{key}': {e}")
             return key
 
+    def get_available_languages(self) -> list:
+        """사용 가능한 언어 코드 목록"""
+        return list(self.translations.keys())
+
     def get_language_display_name(self, lang_code: str) -> str:
-        """언어 코드에 대한 표시 이름 반환 (하위 호환성 유지)"""
-        return LanguageManager.get_display_name(lang_code)
+        """언어 코드에 대한 표시 이름"""
+        display_names = {
+            'ko': '한국어',
+            'ja': '日本語',
+            'zh_CN': '中文(简体)',
+            'zh_TW': '中文(繁體)',
+            'en': 'English'
+        }
+        return display_names.get(lang_code, lang_code)
 
-# Global instance
-translation_manager = TranslationManager()
+# 시스템 언어 감지
+def detect_system_language() -> str:
+    lang, _ = locale.getdefaultlocale()
+    if lang:
+        lang_code = lang.split('_')[0]
+        if lang_code == 'zh':
+            # 중국어의 경우 간체/번체 구분
+            if lang.lower() == 'zh_tw':
+                return 'zh_TW'
+            return 'zh_CN'
+        if lang_code in ['ko', 'ja', 'en']:
+            return lang_code
+    return 'ko'
 
+# 글로벌 인스턴스
+translation_manager = TranslationManager(default_language=detect_system_language())
+
+# 간편한 접근을 위한 헬퍼 함수
 def _(key: str, **kwargs) -> str:
-    """번역 함수 (하위 호환성 유지)"""
+    """UI 텍스트 번역을 위한 단축 함수"""
     return translation_manager.get(key, **kwargs)
