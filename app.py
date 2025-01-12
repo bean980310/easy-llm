@@ -374,44 +374,35 @@ with gr.Blocks() as demo:
             queue=False
         )
         
-    def change_language(display_name: str):
-        """
-        언어 변경 처리
-        
-        Args:
-            display_name: 선택된 언어의 표시 이름
-        """
-        success = translation_manager.set_language(display_name)
-        if not success:
-            return {
-                "title": gr.update(),  # 현재 값 유지
-                "system_message_box": gr.update(),  # 현재 값 유지
-                "model_type_dropdown": gr.update(),  # 현재 값 유지
-                "model_dropdown": gr.update(),  # 현재 값 유지
-                "api_key_text": gr.update(),  # 현재 값 유지
-                "image_input": gr.update(),  # 현재 값 유지
-                "msg": gr.update(),  # 현재 값 유지
-                "send_btn": gr.update(),  # 현재 값 유지
-                "seed_input": gr.update(),  # 현재 값 유지
-            }
+    def change_language(selected_lang):
+        """언어 변경 처리 함수"""
+        lang_map = {
+            "한국어": "ko",
+            "日本語": "ja",
+            "中文(简体)": "zh_CN",
+            "中文(繁體)": "zh_TW",
+            "English": "en"
+        }
+        lang_code = lang_map.get(selected_lang, "ko")
+        translation_manager.set_language(lang_code)
 
         return {
-            title: gr.update(value=f"## {_('main_title')}"),
-            system_message_box: gr.update(
+            gr.update(value=f"## {_('main_title')}"),
+            gr.update(
                 label=_("system_message"),
                 value=_("system_message_default"),
                 placeholder=_("system_message_placeholder")
             ),
-            model_type_dropdown: gr.update(label=_("model_type_label")),
-            model_dropdown: gr.update(label=_("model_select_label")),
-            api_key_text: gr.update(label=_("api_key_label")),
-            image_input: gr.update(label=_("image_upload_label")),
-            msg: gr.update(
+            gr.update(label=_("model_type_label")),
+            gr.update(label=_("model_select_label")),
+            gr.update(label=_("api_key_label")),
+            gr.update(label=_("image_upload_label")),
+            gr.update(
                 label=_("message_input_label"),
                 placeholder=_("message_placeholder")
             ),
-            send_btn: gr.update(value=_("send_button")),
-            seed_input: gr.update(label=_("seed_label"), info=_("seed_info"))
+            gr.update(value=_("send_button")),
+            gr.update(label=_("seed_label"), info=_("seed_info"))
         }
 
 
