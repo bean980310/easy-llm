@@ -179,19 +179,17 @@ def filter_messages_for_chatbot(history):
             messages_for_chatbot.append({"role": msg["role"], "content": content})
         return messages_for_chatbot
 
-history_state = gr.State([])
-overwrite_state = gr.State(False) 
-
-# 단일 history_state와 selected_device_state 정의 (중복 제거)
-custom_model_path_state = gr.State("")
-session_id_state = gr.State()
-history_state = gr.State([])
-selected_device_state = gr.State(default_device)
-seed_state = gr.State(42)  # 시드 상태 전역 정의
-selected_language_state = gr.State(default_language)
-
 with gr.Blocks() as demo:
-    error_text = gr.Markdown(visible=False) 
+    history_state = gr.State([])
+    overwrite_state = gr.State(False) 
+
+    # 단일 history_state와 selected_device_state 정의 (중복 제거)
+    custom_model_path_state = gr.State("")
+    session_id_state = gr.State()
+    selected_device_state = gr.State(default_device)
+    seed_state = gr.State(42)  # 시드 상태 전역 정의
+    selected_language_state = gr.State(default_language)
+    
     title=gr.Markdown(f"## {_('main_title')}")
     language_dropdown = gr.Dropdown(
         label=_('language_select'),
