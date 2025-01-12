@@ -126,9 +126,6 @@ def on_app_start():
         loaded_history = [default_system]
     return sid, loaded_history
 
-history_state = gr.State([])
-overwrite_state = gr.State(False) 
-
 def user_message(user_input, session_id, history, system_msg):
     if not user_input.strip():
         return "", history, ""
@@ -182,6 +179,17 @@ def filter_messages_for_chatbot(history):
             messages_for_chatbot.append({"role": msg["role"], "content": content})
         return messages_for_chatbot
 
+history_state = gr.State([])
+overwrite_state = gr.State(False) 
+
+# 단일 history_state와 selected_device_state 정의 (중복 제거)
+custom_model_path_state = gr.State("")
+session_id_state = gr.State()
+history_state = gr.State([])
+selected_device_state = gr.State(default_device)
+seed_state = gr.State(42)  # 시드 상태 전역 정의
+selected_language_state = gr.State(default_language)
+
 with gr.Blocks() as demo:
     error_text = gr.Markdown(visible=False) 
     title=gr.Markdown(f"## {_('main_title')}")
@@ -193,19 +201,13 @@ with gr.Blocks() as demo:
         info=_('language_info')
     )
     
-    custom_model_path_state = gr.State("")
-    session_id_state = gr.State(None)
     system_message_box = gr.Textbox(
         label=_("system_message"),
         value=_("system_message_default"),
         placeholder=_("system_message_placeholder")
     )
-    selected_device_state = gr.State(default_device)
-        
+    
     with gr.Tab(_("tab_main")):
-        
-        history_state = gr.State([])
-        
         initial_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
         initial_choices = list(dict.fromkeys(initial_choices))
         initial_choices = sorted(initial_choices)  # 정렬 추가
@@ -255,8 +257,6 @@ with gr.Blocks() as demo:
                     interactive=True,
                     info=_("seed_info")
                 )
-                
-            seed_state = gr.State(42)
         
             # 시드 입력과 상태 연결
             seed_input.change(
