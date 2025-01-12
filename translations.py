@@ -183,6 +183,8 @@ class TranslationManager:
             },
             'zh_CN': {
                 'main_title': '简单聊天机器人',
+                'language_select': '选择语言',
+                'language_info': '选择界面语言',
                 'system_message': '系统消息',
                 'system_message_default': '你是一个有用的AI秘书。',
                 'system_message_placeholder': '定义对话特征、语气等。',
