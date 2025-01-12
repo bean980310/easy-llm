@@ -1,0 +1,16 @@
+{
+  "main_title": "Simple Chatbot",
+  "system_message": "System Message",
+  "system_message_default": "You are a useful AI assistant.",
+  "system_message_placeholder": "Define conversation characteristics, tone, etc.",
+  "tab_main": "Main",
+  "model_type_label": "Select Model Type",
+  "model_select_label": "Select Model",
+  "api_key_label": "OpenAI API Key",
+  "image_upload_label": "Upload Image (Optional)",
+  "message_input_label": "Enter Message",
+  "message_placeholder": "Type your message...",
+  "send_button": "Send",
+  "seed_label": "Seed Value",
+  "seed_info": "Set a seed value to make model predictions reproducible."
+}

@@ -1,0 +1,16 @@
+{
+  "main_title": "簡單聊天機器人",
+  "system_message": "系統消息",
+  "system_message_default": "你是一個有用的AI祕書。",
+  "system_message_placeholder": "定義對話特徵、語氣等。",
+  "tab_main": "主幹",
+  "model_type_label": "選擇模型類型",
+  "model_select_label": "選擇模型",
+  "api_key_label": "OpenAI API密鑰",
+  "image_upload_label": "上傳圖片（可選）",
+  "message_input_label": "輸入消息",
+  "message_placeholder": "請輸入消息...",
+  "send_button": "發送",
+  "seed_label": "種子值",
+  "seed_info": "設置種子值以使模型預測可重現。"
+}

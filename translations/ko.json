@@ -1,0 +1,16 @@
+{
+  "main_title": "간단한 Chatbot",
+  "system_message": "시스템 메시지",
+  "system_message_default": "당신은 유용한 AI 비서입니다.",
+  "system_message_placeholder": "대화의 성격, 말투 등을 정의하세요.",
+  "tab_main": "메인",
+  "model_type_label": "모델 유형 선택",
+  "model_select_label": "모델 선택",
+  "api_key_label": "OpenAI API 키",
+  "image_upload_label": "이미지 업로드 (선택)",
+  "message_input_label": "메시지 입력",
+  "message_placeholder": "메시지를 입력하세요...",
+  "send_button": "전송",
+  "seed_label": "시드 값",
+  "seed_info": "모델의 예측을 재현 가능하게 하기 위해 시드를 설정하세요."
+}

@@ -127,9 +127,7 @@ def on_app_start():
 history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
-with gr.Blocks() as demo:
-    gr.Markdown(f"## {_("main_title")}")
-    
+with gr.Blocks() as demo:   
     language_dropdown = gr.Dropdown(
         label="Language / 언어 / 言語 / 语言 / 語言",
         choices=translation_manager.get_available_languages(),
@@ -369,6 +367,31 @@ with gr.Blocks() as demo:
             outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
         )
+        
+    def change_language(lang):
+        translation_manager.set_language(lang)
+        # UI 텍스트 업데이트를 위한 딕셔너리 반환
+        return {
+            system_message_box: gr.update(label=_("system_message"),value=_("system_message_default"),
+        placeholder=_("system_message_placeholder")),
+            model_type_dropdown: gr.update(label=_("model_type_label")),
+            model_dropdown: gr.update(label=_("model_select_label")),
+            api_key_text: gr.update(label=_("api_key_label")),
+            # ... 기타 UI 요소들의 업데이트
+        }
+
+    # 언어 변경 이벤트 연결
+    language_dropdown.change(
+        fn=change_language,
+        inputs=[language_dropdown],
+        outputs=[
+            system_message_box,
+            model_type_dropdown,
+            model_dropdown,
+            api_key_text,
+            # ... 기타 업데이트가 필요한 컴포넌트들
+        ]
+    )
     
     with gr.Tab("다운로드"):
         gr.Markdown("""### 모델 다운로드
@@ -1387,4 +1410,4 @@ with gr.Blocks() as demo:
             outputs=prompt_output_sd
         )
 
-demo.launch(debug=True, inbrowser=True, server_port=7861, width=500)
+demo.launch(debug=True, inbrowser=True, server_port=7861, width=800)

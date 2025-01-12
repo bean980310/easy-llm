@@ -1,0 +1,16 @@
+{
+  "main_title": "シンプルなチャットボット",
+  "system_message": "システムメッセージ",
+  "system_message_default": "あなたは有用なAI秘書です。",
+  "system_message_placeholder": "会話の性格、話し方などを定義してください。",
+  "tab_main": "メイン",
+  "model_type_label": "モデルタイプの選択",
+  "model_select_label": "モデルの選択",
+  "api_key_label": "OpenAI APIキー",
+  "image_upload_label": "画像のアップロード（オプション）",
+  "message_input_label": "メッセージを入力",
+  "message_placeholder": "メッセージを入力してください...",
+  "send_button": "送信",
+  "seed_label": "シード値",
+  "seed_info": "モデルの予測を再現可能にするためにシード値を設定してください。"
+}

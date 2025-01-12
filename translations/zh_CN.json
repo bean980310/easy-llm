@@ -1,0 +1,16 @@
+{
+  "main_title": "简单聊天机器人",
+  "system_message": "系统消息",
+  "system_message_default": "你是一个有用的AI秘书。",
+  "system_message_placeholder": "定义对话特征、语气等。",
+  "tab_main": "主干",
+  "model_type_label": "选择模型类型",
+  "model_select_label": "选择模型",
+  "api_key_label": "OpenAI API密钥",
+  "image_upload_label": "上传图片（可选）",
+  "message_input_label": "输入消息",
+  "message_placeholder": "请输入消息...",
+  "send_button": "发送",
+  "seed_label": "种子值",
+  "seed_info": "设置种子值以使模型预测可重现。"
+}
