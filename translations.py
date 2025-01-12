@@ -36,6 +36,8 @@ class TranslationManager:
         default_translations = {
             'ko': {
                 'main_title': '간단한 Chatbot',
+                'language_select': '언어 선택',
+                'language_info': '인터페이스 언어를 선택하세요',
                 'system_message': '시스템 메시지',
                 'system_message_default': '당신은 유용한 AI 비서입니다.',
                 'system_message_placeholder': '대화의 성격, 말투 등을 정의하세요.',
