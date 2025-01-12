@@ -635,7 +635,22 @@ with gr.Blocks() as demo:
                 gr.update(
                     placeholder=_("custom_model_id_placeholder"),
                     info=_("custom_model_id_info")
-                )
+                ),
+                gr.update(
+                    label=_("save_path_label"),
+                    info=_("save_path_info")
+                ),
+                gr.update(
+                    label=_("auth_required_label"),
+                    info=_("auth_required_info")
+                ),
+                gr.update(
+                    label=_("hf_token_label"),
+                    info=_("hf_token_info")
+                ),
+                gr.update(value=_("download_start_button")),
+                gr.update(value=_("download_cancel_button")),
+                gr.update(label=_("download_log_label"))
             ]
         language_dropdown.change(
             fn=change_language,
@@ -645,6 +660,12 @@ with gr.Blocks() as demo:
                 download_mode,
                 predefined_dropdown,
                 custom_repo_id_box,
+                target_path,
+                use_auth,
+                hf_token,
+                download_btn,
+                cancel_btn,
+                download_info
                 # ... 기타 업데이트가 필요한 컴포넌트들
         ]
     )
