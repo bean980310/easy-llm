@@ -1,0 +1,19 @@
+{
+    "ko":{
+        "title": "간단한 Chatbot",
+        "select_model": "모델 유형 선택",
+        "selected_model": "선택된 모델 유형",
+        "chatbot_label": "Chatbot",
+        "profile_image_label": "프로필 이미지",
+        "input_placeholder": "메시지를 입력하세요...",
+        "send_button": "전송",
+        "status_generating": "🤔 답변을 생성하는 중입니다...",
+        "error_no_model": "❌ 모델 유형이 선택되지 않았습니다.",
+        "error_unsupported_model": "❌ 지원되지 않는 모델 유형입니다.",
+        "error_memory": "❌ 메모리 부족 오류가 발생했습니다. 시스템 관리자에게 문의하세요.",
+        "error_general": "❌ 오류 발생: {error}",
+        "system_message_label": "시스템 메시지",
+        "language_select": "언어 선택",
+        "language_info": "인터페이스 언어를 선택하세요."
+    }
+}

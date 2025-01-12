@@ -1,0 +1,17 @@
+{
+    "title": "简易聊天机器人",
+    "select_model": "选择模型类型",
+    "selected_model": "选择的模型类型",
+    "chatbot_label": "聊天机器人",
+    "profile_image_label": "头像",
+    "input_placeholder": "请输入您的消息...",
+    "send_button": "发送",
+    "status_generating": "🤔 正在生成回复...",
+    "error_no_model": "❌ 未选择模型类型。",
+    "error_unsupported_model": "❌ 不支持的模型类型。",
+    "error_memory": "❌ 内存错误发生。请联系系统管理员。",
+    "error_general": "❌ 发生错误: {error}",
+    "system_message_label": "系统消息",
+    "language_select": "选择语言",
+    "language_info": "选择界面使用的语言。"
+}

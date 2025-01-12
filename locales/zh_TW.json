@@ -1,0 +1,17 @@
+{
+    "title": "簡易聊天機器人",
+    "select_model": "選擇模型類型",
+    "selected_model": "選擇的模型類型",
+    "chatbot_label": "聊天機器人",
+    "profile_image_label": "頭像",
+    "input_placeholder": "請輸入您的消息...",
+    "send_button": "發送",
+    "status_generating": "🤔 正在生成回覆...",
+    "error_no_model": "❌ 未選擇模型類型。",
+    "error_unsupported_model": "❌ 不支持的模型類型。",
+    "error_memory": "❌ 發生內存錯誤。請聯繫系統管理員。",
+    "error_general": "❌ 發生錯誤: {error}",
+    "system_message_label": "系統消息",
+    "language_select": "選擇語言",
+    "language_info": "選擇介面使用的語言。"
+}
