@@ -33,7 +33,7 @@ from database import (
     get_preset_choices)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
-from translations import translation_manager, _
+from translations import translation_manager, _, LanguageManager
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -127,21 +127,54 @@ def on_app_start():
 history_state = gr.State([])
 overwrite_state = gr.State(False) 
 
-LANGUAGE_NAMES = {
-    'ko': '한국어',
-    'en': 'English',
-    'ja': '日本語',
-    'zh_CN': '简体中文',
-    'zh_TW': '繁體中文'
-}
+def init_language_dropdown():
+    """언어 선택 드롭다운 초기화"""
+    return gr.Dropdown(
+        label="Language / 언어 / 言語 / 语言 / 語言",
+        choices=LanguageManager.get_all_display_names(),
+        value=LanguageManager.get_display_name(translation_manager.current_language),
+        interactive=True,
+    )
+
+def change_language(display_name: str):
+    """
+    언어 변경 처리
+    
+    Args:
+        display_name: 선택된 언어의 표시 이름
+    """
+    success = translation_manager.set_language(display_name)
+    if not success:
+        return {
+            title: gr.update(),  # 현재 값 유지
+            system_message_box: gr.update(),  # 현재 값 유지
+            error_text: gr.update(value="Failed to change language", visible=True)
+        }
+
+    return {
+        title: gr.update(value=f"## {_('main_title')}"),
+        system_message_box: gr.update(
+            label=_("system_message"),
+            value=_("system_message_default"),
+            placeholder=_("system_message_placeholder")
+        ),
+        model_type_dropdown: gr.update(label=_("model_type_label")),
+        model_dropdown: gr.update(label=_("model_select_label")),
+        api_key_text: gr.update(label=_("api_key_label")),
+        image_input: gr.update(label=_("image_upload_label")),
+        msg: gr.update(
+            label=_("message_input_label"),
+            placeholder=_("message_placeholder")
+        ),
+        send_btn: gr.update(value=_("send_button")),
+        seed_input: gr.update(label=_("seed_label"), info=_("seed_info")),
+        error_text: gr.update(visible=False)
+    }
 
 with gr.Blocks() as demo:
+    error_text = gr.Markdown(visible=False) 
     title=gr.Markdown(f"## {_('main_title')}")
-    language_dropdown = gr.Dropdown(
-        label="Language / 언어 / 言語 / 语言 / 語言",
-        choices={code: translation_manager.LANGUAGE_NAMES[code] for code in translation_manager.get_available_languages()},
-        value=translation_manager.current_language
-    )
+    language_dropdown = init_language_dropdown()
     
     custom_model_path_state = gr.State("")
     session_id_state = gr.State(None)
@@ -150,6 +183,7 @@ with gr.Blocks() as demo:
         value=_("system_message_default"),
         placeholder=_("system_message_placeholder")
     )
+    error_text= gr.Markdown(visible=False)
     selected_device_state = gr.State(default_device)
         
     with gr.Tab(_("tab_main")):
@@ -376,23 +410,6 @@ with gr.Blocks() as demo:
             outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
         )
-        
-    def change_language(lang):
-        translation_manager.set_language(lang)
-        # UI 텍스트 업데이트를 위한 딕셔너리 반환
-        return {
-            title: gr.update(value=f"## {_('main_title')}"),
-            system_message_box: gr.update(label=_("system_message"),value=_("system_message_default"),
-        placeholder=_("system_message_placeholder")),
-            model_type_dropdown: gr.update(label=_("model_type_label")),
-            model_dropdown: gr.update(label=_("model_select_label")),
-            api_key_text: gr.update(label=_("api_key_label")),
-            image_input: gr.update(label=_("image_upload_label")),
-            msg: gr.update(label=_("message_input_label"),
-            placeholder=_("message_placeholder")),
-            send_btn: gr.update(value=_("send_button"))
-            # ... 기타 UI 요소들의 업데이트
-        }
 
     # 언어 변경 이벤트 연결
     language_dropdown.change(
@@ -401,12 +418,15 @@ with gr.Blocks() as demo:
         outputs=[
             title,
             system_message_box,
+            error_text,
             model_type_dropdown,
             model_dropdown,
             api_key_text,
             image_input,
             msg,
-            send_btn
+            send_btn,
+            seed_input,
+            error_text
             # ... 기타 업데이트가 필요한 컴포넌트들
         ]
     )
