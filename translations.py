@@ -174,6 +174,17 @@ class TranslationManager:
     def get_available_languages(self) -> list:
         """Get list of available language codes"""
         return list(self.translations.keys())
+    
+    def get_language_display_name(self, lang_code: str) -> str:
+        """언어 코드에 대한 표시 이름"""
+        display_names = {
+            'ko': '한국어',
+            'ja': '日本語',
+            'zh_CN': '中文(简体)',
+            'zh_TW': '中文(繁體)',
+            'en': 'English'
+        }
+        return display_names.get(lang_code, lang_code)
 
 # Global instance
 translation_manager = TranslationManager()
