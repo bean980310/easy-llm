@@ -340,6 +340,55 @@ with gr.Blocks() as demo:
         
         bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
         
+        def change_language(selected_lang):
+            """언어 변경 처리 함수"""
+            lang_map = {
+                "한국어": "ko",
+                "日本語": "ja",
+                "中文(简体)": "zh_CN",
+                "中文(繁體)": "zh_TW",
+                "English": "en"
+            }
+            lang_code = lang_map.get(selected_lang, "ko")
+            translation_manager.set_language(lang_code)
+
+            return [
+                gr.update(value=f"## {_('main_title')}"),
+                gr.update(
+                    label=_("system_message"),
+                    value=_("system_message_default"),
+                    placeholder=_("system_message_placeholder")
+                ),
+                gr.update(label=_("model_type_label")),
+                gr.update(label=_("model_select_label")),
+                gr.update(label=_("api_key_label")),
+                gr.update(label=_("image_upload_label")),
+                gr.update(
+                    label=_("message_input_label"),
+                    placeholder=_("message_placeholder")
+                ),
+                gr.update(value=_("send_button")),
+                gr.update(label=_("seed_label"), info=_("seed_info"))
+            ]
+
+
+        # 언어 변경 이벤트 연결
+        language_dropdown.change(
+            fn=change_language,
+            inputs=[language_dropdown],
+            outputs=[
+                title,
+                system_message_box,
+                error_text,
+                model_type_dropdown,
+                model_dropdown,
+                api_key_text,
+                image_input,
+                msg,
+                send_btn,
+                seed_input
+            ]
+        )
         # 메시지 전송 시 함수 연결
         msg.submit(
             fn=user_message,
@@ -373,56 +422,6 @@ with gr.Blocks() as demo:
             outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
         )
-        
-    def change_language(selected_lang):
-        """언어 변경 처리 함수"""
-        lang_map = {
-            "한국어": "ko",
-            "日本語": "ja",
-            "中文(简体)": "zh_CN",
-            "中文(繁體)": "zh_TW",
-            "English": "en"
-        }
-        lang_code = lang_map.get(selected_lang, "ko")
-        translation_manager.set_language(lang_code)
-
-        return [
-            gr.update(value=f"## {_('main_title')}"),
-            gr.update(
-                label=_("system_message"),
-                value=_("system_message_default"),
-                placeholder=_("system_message_placeholder")
-            ),
-            gr.update(label=_("model_type_label")),
-            gr.update(label=_("model_select_label")),
-            gr.update(label=_("api_key_label")),
-            gr.update(label=_("image_upload_label")),
-            gr.update(
-                label=_("message_input_label"),
-                placeholder=_("message_placeholder")
-            ),
-            gr.update(value=_("send_button")),
-            gr.update(label=_("seed_label"), info=_("seed_info"))
-        ]
-
-
-    # 언어 변경 이벤트 연결
-    language_dropdown.change(
-        fn=change_language,
-        inputs=[language_dropdown],
-        outputs=[
-            title,
-            system_message_box,
-            error_text,
-            model_type_dropdown,
-            model_dropdown,
-            api_key_text,
-            image_input,
-            msg,
-            send_btn,
-            seed_input
-        ]
-    )
     
     with gr.Tab(_("download_tab")):
         download_title=gr.Markdown(f"""### {_("download_title")}
