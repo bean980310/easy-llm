@@ -18,7 +18,18 @@ from utils import (
     convert_and_save,
     clear_all_model_cache
 )
-from database import load_chat_from_db, load_system_presets, initial_load_presets, get_existing_sessions, save_chat_button_click, save_chat_history_csv, save_chat_history_db, handle_add_preset, handle_delete_preset
+from database import (
+    load_chat_from_db, 
+    load_system_presets, 
+    initial_load_presets, 
+    get_existing_sessions, 
+    save_chat_button_click, 
+    save_chat_history_csv, 
+    save_chat_history_db, 
+    handle_add_preset, 
+    handle_delete_preset, 
+    preset_exists,
+    get_preset_choices)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 import sqlite3
@@ -113,6 +124,7 @@ def on_app_start():
     return sid, loaded_history
 
 history_state = gr.State([])
+overwrite_state = gr.State(False) 
 
 with gr.Blocks() as demo:
     gr.Markdown("## 간단한 Chatbot")
@@ -866,7 +878,7 @@ with gr.Blocks() as demo:
                     interactive=True
                 )
                 apply_preset_btn = gr.Button("프리셋 적용")
-
+        
             with gr.Row():
                 preset_name = gr.Textbox(
                     label="새 프리셋 이름",
@@ -879,62 +891,116 @@ with gr.Blocks() as demo:
                     lines=4,
                     interactive=True
                 )
-
+        
             with gr.Row():
                 add_preset_btn = gr.Button("프리셋 추가", variant="primary")
                 delete_preset_btn = gr.Button("프리셋 삭제", variant="secondary")
-
+        
             preset_info = gr.Textbox(
                 label="프리셋 관리 결과",
                 interactive=False
             )
-
-        # 프리셋 Dropdown 초기화
-        demo.load(
-            fn=initial_load_presets,
-            inputs=[],
-            outputs=[preset_dropdown],
-            queue=False
-        )
-
-        # 프리셋 추가 이벤트 연결
-        add_preset_btn.click(
-            fn=handle_add_preset,
-            inputs=[preset_name, preset_content],
-            outputs=[preset_info, preset_dropdown]
-        )
-
-        # 프리셋 삭제 이벤트 연결
-        delete_preset_btn.click(
-            fn=handle_delete_preset,
-            inputs=[preset_dropdown],
-            outputs=[preset_info, preset_dropdown]
-        )
-
-        # 프리셋 적용 이벤트 수정
-        def apply_preset(name, session_id, history):
-            if not name:
-                return "❌ 적용할 프리셋을 선택해주세요.", history, gr.update()
-            presets = load_system_presets()
-            content = presets.get(name, "")
-            if not content:
-                return "❌ 선택한 프리셋에 내용이 없습니다.", history, gr.update()
-
-            # 현재 세션의 히스토리를 초기화하고 시스템 메시지 추가
-            new_history = [{"role": "system", "content": content}]
-            logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
-            return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content)
-
-        apply_preset_btn.click(
-            fn=apply_preset,
-            inputs=[preset_dropdown, session_id_state, history_state],
-            outputs=[preset_info, history_state, system_message_box]
-        ).then(
-            fn=filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=chatbot
-        )
         
+            # 덮어쓰기 확인을 위한 컴포넌트 추가 (처음에는 숨김)
+            with gr.Row():
+                confirm_overwrite_btn = gr.Button("확인", variant="primary", visible=False)
+                cancel_overwrite_btn = gr.Button("취소", variant="secondary", visible=False)
+        
+            overwrite_message = gr.Textbox(
+                label="덮어쓰기 메시지",
+                value="",
+                interactive=False
+            )
+        
+            # 프리셋 Dropdown 초기화
+            demo.load(
+                fn=initial_load_presets,
+                inputs=[],
+                outputs=[preset_dropdown],
+                queue=False
+            )
+        
+            # 프리셋 추가 버튼 클릭 시
+            def on_add_preset_click(name, content):
+                if preset_exists(name.strip()):
+                    # 프리셋이 이미 존재하면 덮어쓰기 확인을 요청
+                    return "", gr.update(visible=True), gr.update(visible=True), "⚠️ 해당 프리셋이 이미 존재합니다. 덮어쓰시겠습니까?"
+                else:
+                    success, message = handle_add_preset(name.strip(), content.strip())
+                    if success:
+                        return message, gr.update(visible=False), gr.update(visible=False), ""
+                    else:
+                        return message, gr.update(visible=False), gr.update(visible=False), ""
+            
+            add_preset_btn.click(
+                fn=on_add_preset_click,
+                inputs=[preset_name, preset_content],
+                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
+            )
+        
+            # 덮어쓰기 확인 버튼 클릭 시
+            def confirm_overwrite(name, content):
+                success, message = handle_add_preset(name.strip(), content.strip(), overwrite=True)
+                if success:
+                    return message, gr.update(visible=False), gr.update(visible=False), ""
+                else:
+                    return message, gr.update(visible=False), gr.update(visible=False), ""
+            
+            confirm_overwrite_btn.click(
+                fn=confirm_overwrite,
+                inputs=[preset_name, preset_content],
+                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
+            )
+        
+            # 덮어쓰기 취소 버튼 클릭 시
+            def cancel_overwrite():
+                return "❌ 덮어쓰기가 취소되었습니다.", gr.update(visible=False), gr.update(visible=False), ""
+            
+            cancel_overwrite_btn.click(
+                fn=cancel_overwrite,
+                inputs=[],
+                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
+            )
+        
+            # 프리셋 삭제 버튼 클릭 시
+            def on_delete_preset_click(name):
+                if not name:
+                    return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices())
+                success, message = handle_delete_preset(name)
+                if success:
+                    return message, gr.update(choices=get_preset_choices())
+                else:
+                    return message, gr.update(choices=get_preset_choices())
+        
+            delete_preset_btn.click(
+                fn=on_delete_preset_click,
+                inputs=[preset_dropdown],
+                outputs=[preset_info, preset_dropdown]
+            )
+        
+            # 프리셋 적용 이벤트 수정
+            def apply_preset(name, session_id, history):
+                if not name:
+                    return "❌ 적용할 프리셋을 선택해주세요.", history, gr.update()
+                presets = load_system_presets()
+                content = presets.get(name, "")
+                if not content:
+                    return "❌ 선택한 프리셋에 내용이 없습니다.", history, gr.update()
+        
+                # 현재 세션의 히스토리를 초기화하고 시스템 메시지 추가
+                new_history = [{"role": "system", "content": content}]
+                logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
+                return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content)
+        
+            apply_preset_btn.click(
+                fn=apply_preset,
+                inputs=[preset_dropdown, session_id_state, history_state],
+                outputs=[preset_info, history_state, system_message_box]
+            ).then(
+                fn=filter_messages_for_chatbot,
+                inputs=[history_state],
+                outputs=chatbot
+            )
         # 채팅 기록 저장 섹션
         with gr.Accordion("채팅 기록 저장", open=False):
             save_button = gr.Button("채팅 기록 저장", variant="secondary")

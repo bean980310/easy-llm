@@ -43,21 +43,30 @@ def load_system_presets():
         return {}
 
 # 새로운 시스템 메시지 프리셋 추가
-def add_system_preset(name, content):
+def add_system_preset(name, content, overwrite=False):
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO system_presets (name, content) 
-            VALUES (?, ?)
-            ON CONFLICT(name) DO UPDATE SET content=excluded.content
-        """, (name, content))
+        if overwrite:
+            cursor.execute("""
+                UPDATE system_presets SET content = ?
+                WHERE name = ?
+            """, (content, name))
+            logger.info(f"프리셋 업데이트: {name}")
+        else:
+            cursor.execute("""
+                INSERT INTO system_presets (name, content) 
+                VALUES (?, ?)
+            """, (name, content))
+            logger.info(f"프리셋 추가: {name}")
         conn.commit()
         conn.close()
-        logger.info(f"프리셋 추가/업데이트: {name}")
-        return True, "프리셋이 성공적으로 추가/업데이트되었습니다."
+        return True, "프리셋이 성공적으로 저장되었습니다."
+    except sqlite3.IntegrityError:
+        logger.warning(f"프리셋 '{name}'이(가) 이미 존재합니다.")
+        return False, "프리셋이 이미 존재합니다."
     except Exception as e:
-        logger.error(f"시스템 메시지 프리셋 추가/업데이트 오류: {e}")
+        logger.error(f"시스템 메시지 프리셋 저장 오류: {e}")
         return False, f"오류 발생: {e}"
 
 # 시스템 메시지 프리셋 삭제
@@ -73,6 +82,19 @@ def delete_system_preset(name):
     except Exception as e:
         logger.error(f"시스템 메시지 프리셋 삭제 오류: {e}")
         return False, f"오류 발생: {e}"
+    
+def preset_exists(name):
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM system_presets WHERE name = ?", (name,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception as e:
+        logger.error(f"프리셋 존재 여부 확인 오류: {e}")
+        return False
+    
 def get_preset_choices():
     presets = load_system_presets()
     return sorted(presets.keys())
@@ -83,15 +105,23 @@ def initial_load_presets():
     return gr.update(choices=presets)
 
 # 프리셋 추가 핸들러
-def handle_add_preset(name, content):
+def handle_add_preset(name, content, confirm_overwrite=False):
     if not name.strip() or not content.strip():
         return "❌ 프리셋 이름과 내용을 모두 입력해주세요.", gr.update(choices=get_preset_choices())
-    success, message = add_system_preset(name.strip(), content.strip())
+    
+    exists = preset_exists(name.strip())
+    
+    if exists and not confirm_overwrite:
+        # 프리셋이 존재하지만 덮어쓰기 확인이 이루어지지 않은 경우
+        return "⚠️ 해당 프리셋이 이미 존재합니다. 덮어쓰시겠습니까?", gr.update(choices=get_preset_choices()), True  # 추가 출력: 덮어쓰기 필요
+    
+    success, message = add_system_preset(name.strip(), content.strip(), overwrite=exists)
     if success:
         presets = get_preset_choices()
-        return message, gr.update(choices=presets)
+        return message, gr.update(choices=presets), False  # 덮어쓰기 완료
     else:
-        return message, gr.update(choices=get_preset_choices())
+        return message, gr.update(choices=get_preset_choices()), False
+
 
 # 프리셋 삭제 핸들러
 def handle_delete_preset(name):
@@ -155,6 +185,9 @@ def save_chat_history_db(history, session_id="session_1"):
         return True
     except sqlite3.OperationalError as e:
         logger.error(f"DB 작업 중 오류: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error saving chat history to DB: {e}")
         return False
     finally:
         if conn:
