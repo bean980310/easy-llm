@@ -232,6 +232,8 @@ class TranslationManager:
             },
             'zh_TW': {
                 'main_title': '簡單聊天機器人',
+                'language_select': '選擇語言',
+                'language_info': '選擇界面語言',
                 'system_message': '系統消息',
                 'system_message_default': '你是一個有用的AI祕書。',
                 'system_message_placeholder': '定義對話特徵、語氣等。',
