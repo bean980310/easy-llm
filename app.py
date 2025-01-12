@@ -666,49 +666,48 @@ with gr.Blocks() as demo:
                 download_btn,
                 cancel_btn,
                 download_info
-                # ... 기타 업데이트가 필요한 컴포넌트들
         ]
     )
-    with gr.Tab("허브"):
-        gr.Markdown("""### 허깅페이스 허브 모델 검색
-        허깅페이스 허브에서 모델을 검색하고 다운로드할 수 있습니다. 
-        키워드로 검색하거나 필터를 사용하여 원하는 모델을 찾을 수 있습니다.""")
+    with gr.Tab(_("hub_tab_title")):
+        hub_title=gr.Markdown(f"""### {_("hub_description")}
+        {_("hub_description_detail")}
+        {_("hub_search_description")}""")
         
         with gr.Row():
             search_box = gr.Textbox(
-                label="검색어",
-                placeholder="모델 이름, 태그 또는 키워드를 입력하세요",
+                label=_("hub_search_label"),
+                placeholder=_("hub_search_placeholder"),
                 scale=4
             )
-            search_btn = gr.Button("검색", scale=1)
+            search_btn = gr.Button(_("hub_search_button"), scale=1)
             
         with gr.Row():
             with gr.Column(scale=1):
                 model_type_filter = gr.Dropdown(
-                    label="모델 유형",
+                    label=_("hub_model_type_label"),
                     choices=["All", "Text Generation", "Vision", "Audio", "Other"],
                     value="All"
                 )
                 language_filter = gr.Dropdown(
-                    label="언어",
+                    label=_("hub_language_label"),
                     choices=["All", "Korean", "English", "Chinese", "Japanese", "Multilingual"],
                     value="All"
                 )
                 library_filter = gr.Dropdown(
-                    label="라이브러리",
+                    label=_("hub_library_label"),
                     choices=["All", "Transformers", "GGUF", "MLX"],
                     value="All"
                 )
             with gr.Column(scale=3):
                 model_list = gr.Dataframe(
                     headers=["Model ID", "Description", "Downloads", "Likes"],
-                    label="검색 결과",
+                    label=_("hub_model_list_label"),
                     interactive=False
                 )
         
         with gr.Row():
             selected_model = gr.Textbox(
-                label="선택된 모델",
+                label=_("hub_selected_model_label"),
                 interactive=False
             )
             
@@ -716,36 +715,36 @@ with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column(scale=2):
                 target_path = gr.Textbox(
-                    label="저장 경로",
-                    placeholder="./models/my-model",
+                    label=_("hub_save_path_label"),
+                    placeholder=_("hub_save_path_placeholder"),
                     value="",
                     interactive=True,
-                    info="비워두면 자동으로 경로가 생성됩니다."
+                    info=_("hub_save_path_info")
                 )
             with gr.Column(scale=1):
                 use_auth = gr.Checkbox(
-                    label="인증 필요",
+                    label=_("hub_auth_required_label"),
                     value=False,
-                    info="비공개 또는 gated 모델 다운로드 시 체크"
+                    info=_("hub_auth_required_info")
                 )
         
         with gr.Column(visible=False) as auth_column:
             hf_token = gr.Textbox(
-                label="HuggingFace Token",
-                placeholder="hf_...",
+                label=_("hub_token_label"),
+                placeholder=_("hub_token_placeholder"),
                 type="password",
-                info="HuggingFace에서 발급받은 토큰을 입력하세요."
+                info=_("hub_token_info")
             )
         
         # 다운로드 버튼과 진행 상태
         with gr.Row():
             download_btn = gr.Button(
-                "다운로드",
+                _("hub_download_button"),
                 variant="primary",
                 scale=2
             )
             cancel_btn = gr.Button(
-                "취소",
+                _("hub_cancel_button"),
                 variant="stop",
                 scale=1,
                 interactive=False
@@ -756,9 +755,9 @@ with gr.Blocks() as demo:
         progress_bar = gr.Progress(track_tqdm=True)
         
         # 다운로드 결과와 로그
-        with gr.Accordion("상세 정보", open=False):
+        with gr.Accordion(_("hub_details_label"), open=False):
             download_info = gr.TextArea(
-                label="다운로드 로그",
+                label=_("hub_download_log_label"),
                 interactive=False,
                 max_lines=10,
                 autoscroll=True
@@ -819,7 +818,7 @@ with gr.Blocks() as demo:
             try:
                 if not model_id:
                     yield (
-                        "❌ 모델을 선택해주세요.",
+                        _('download_error_no_model'),
                         gr.update(interactive=True),
                         gr.update(interactive=False),
                         "다운로드가 시작되지 않았습니다.",
@@ -837,7 +836,7 @@ with gr.Blocks() as demo:
                 # 진행 상태 초기화
                 progress(0, desc="준비 중...")
                 yield (
-                    "🔄 다운로드 준비 중...",
+                    _('download_preparing'),
                     gr.update(interactive=False),
                     gr.update(interactive=True),
                     f"모델: {model_id}\n준비 중...",
@@ -845,7 +844,7 @@ with gr.Blocks() as demo:
                 )
 
                 # 실제 다운로드 수행
-                progress(0.5, desc="다운로드 중...")
+                progress(0.5, desc=_('download_in_progress'))
                 result = download_model_from_hf(
                     model_id,
                     target_dir or os.path.join("./models", model_type, make_local_dir_name(model_id)),
@@ -866,7 +865,7 @@ with gr.Blocks() as demo:
                 new_choices = sorted(new_choices)
 
                 yield (
-                    "✅ 다운로드 완료!" if "실패" not in result else "❌ 다운로드 실패",
+                    _('download_complete') if "실패" not in result else _('download_failed'),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     result,
@@ -875,7 +874,7 @@ with gr.Blocks() as demo:
 
             except Exception as e:
                 yield (
-                    "❌ 오류 발생",
+                    _('download_error'),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     f"오류: {str(e)}\n\n{traceback.format_exc()}",
@@ -915,6 +914,67 @@ with gr.Blocks() as demo:
                 cancel_btn,
                 download_info,
                 model_dropdown
+            ]
+        )
+        
+        def change_language(selected_lang: str):
+            """언어 변경 처리 함수"""
+            lang_map = {
+                "한국어": "ko",
+                "日本語": "ja",
+                "中文(简体)": "zh_CN",
+                "中文(繁體)": "zh_TW",
+                "English": "en"
+            }
+            lang_code = lang_map.get(selected_lang, "ko")
+            translation_manager.set_language(lang_code)
+            
+            return [
+                gr.update(value=f"""### {_("hub_description")}
+                    {_("hub_description_detail")}
+                    {_("hub_search_description")}"""),
+                gr.update(label=_("hub_search_label"),
+                        placeholder=_("hub_search_placeholder")),
+                gr.update(value=_("hub_search_button")),
+                gr.update(label=_("hub_model_type_label"),
+                        choices=["All", "Text Generation", "Vision", "Audio", "Other"]),
+                gr.update(label=_("hub_language_label"),
+                        choices=["All", "Korean", "English", "Chinese", "Japanese", "Multilingual"]),
+                gr.update(label=_("hub_library_label"),
+                        choices=["All", "Transformers", "GGUF", "MLX"]),
+                gr.update(label=_("hub_model_list_label")),
+                gr.update(label=_("hub_selected_model_label")),
+                gr.update(label=_("hub_save_path_label"),
+                        placeholder=_("hub_save_path_placeholder"),
+                        info=_("hub_save_path_info")),
+                gr.update(label=_("hub_auth_required_label"),
+                        info=_("hub_auth_required_info")),
+                gr.update(label=_("hub_token_label"),
+                        placeholder=_("hub_token_placeholder"),
+                        info=_("hub_token_info")),
+                gr.update(value=_("hub_download_button")),
+                gr.update(value=_("hub_cancel_button")),
+                gr.update(label=_("hub_download_log_label"))
+            ]
+            
+        language_dropdown.change(
+            fn=change_language,
+            inputs=[language_dropdown],
+            outputs=[
+                hub_title,
+                search_box,
+                search_btn,
+                model_type_filter,
+                language_filter,
+                library_filter,
+                model_list,
+                selected_model,
+                target_path,
+                use_auth,
+                hf_token,
+                download_btn,
+                cancel_btn,
+                download_info
             ]
         )
         
