@@ -132,6 +132,8 @@ class TranslationManager:
             },
             'ja': {
                 'main_title': 'シンプルなチャットボット',
+                'language_select': '言語選択',
+                'language_info': 'インターフェース言語を選択してください',
                 'system_message': 'システムメッセージ',
                 'system_message_default': 'あなたは有用なAI秘書です。',
                 'system_message_placeholder': '会話の性格、話し方などを定義してください。',
