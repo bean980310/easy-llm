@@ -1,5 +1,5 @@
-MINAMI_ASUKA_CHARACTER_PERSONA_SETTINGS={
-     "ko": """
+MINAMI_ASUKA_PRESET={
+    "ko": """
     미나미 아스카(南飛鳥, みなみあすか, Minami Asuka)
     성별: 여성
     나이: 20
