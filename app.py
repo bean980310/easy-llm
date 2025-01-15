@@ -126,49 +126,77 @@ def on_app_start():
         loaded_history = [default_system]
     return sid, loaded_history
 
-def user_message(user_input, session_id, history, system_msg):
+def process_message(user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed):
+    """
+    사용자 메시지를 처리하고 봇 응답을 생성하는 통합 함수.
+
+    Args:
+        user_input (str): 사용자가 입력한 메시지.
+        session_id (str): 현재 세션 ID.
+        history (list): 채팅 히스토리.
+        system_msg (str): 시스템 메시지.
+        selected_model (str): 선택된 모델 이름.
+        custom_path (str): 사용자 지정 모델 경로.
+        image (PIL.Image or None): 이미지 입력 (비전 모델용).
+        api_key (str or None): API 키 (API 모델용).
+        device (str): 사용할 장치 ('cpu', 'cuda', 등).
+        seed (int): 시드 값.
+
+    Returns:
+        tuple: 업데이트된 입력 필드, 히스토리, Chatbot 컴포넌트, 상태 메시지.
+    """
     if not user_input.strip():
-        return "", history, ""
+        # 빈 입력일 경우 아무 것도 하지 않음
+        return "", history, filter_messages_for_chatbot(history), ""
+
     if not history:
+        # 히스토리가 없을 경우 시스템 메시지로 초기화
         system_message = {
             "role": "system",
             "content": system_msg
         }
         history = [system_message]
-        history.append({"role": "user", "content": user_input})
-        return "", history, "🤔 답변을 생성하는 중입니다..."
-    
-def bot_message(session_id, history, selected_model, custom_path, image, api_key, device, seed):
-    # 모델 유형 결정
-    local_model_path = None
-    if selected_model in api_models:
-        model_type = "api"
-        local_model_path = None
-    elif selected_model == "사용자 지정 모델 경로 변경":
-        # 사용자 지정 모델 경로 사용
-        model_type = "transformers"  # 기본 모델 유형 설정, 필요 시 수정
-        local_model_path = custom_path
-    else:
-        # 로컬 모델 유형 결정 (transformers, gguf, mlx)
-        if selected_model in transformers_local:
-            model_type = "transformers"
-        elif selected_model in gguf_local:
-            model_type = "gguf"
-        elif selected_model in mlx_local:
-            model_type = "mlx"
-        else:
-            model_type = "transformers"  # 기본값
-        local_model_path = None  # 기본 로컬 경로 사용
-                
+
+    # 사용자 메시지 추가
+    history.append({"role": "user", "content": user_input})
+
     try:
-        answer = generate_answer(history, selected_model, model_type, local_model_path, image, api_key, device, seed)
+        # 봇 응답 생성
+        answer = generate_answer(
+            history=history,
+            selected_model=selected_model,
+            model_type="api" if selected_model in api_models else (
+                "transformers" if selected_model in transformers_local else (
+                    "gguf" if selected_model in gguf_local else (
+                        "mlx" if selected_model in mlx_local else "transformers"
+                    )
+                )
+            ),
+            local_model_path=custom_path if selected_model == "사용자 지정 모델 경로 변경" else None,
+            image=image,
+            api_key=api_key,
+            device=device,
+            seed=seed
+        )
+
+        # 응답을 히스토리에 추가
+        history.append({"role": "assistant", "content": answer})
+
+        # 데이터베이스에 히스토리 저장
+        save_chat_history_db(history, session_id=session_id)
+
+        # 상태 메시지 초기화
+        status = ""
+
     except Exception as e:
-        answer = f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
-                
-    history.append({"role": "assistant", "content": answer})
-            
-    save_chat_history_db(history, session_id=session_id)
-    return history, ""  # 로딩 상태 제거
+        logger.error(f"Error generating response: {str(e)}", exc_info=True)
+        history.append({"role": "assistant", "content": f"❌ 오류 발생: {str(e)}"})
+        status = "❌ 오류가 발생했습니다. 로그를 확인하세요."
+
+    # 업데이트된 히스토리를 Chatbot 형식으로 변환
+    chatbot_history = filter_messages_for_chatbot(history)
+
+    return "", history, chatbot_history, status
     
 
 def filter_messages_for_chatbot(history):
@@ -390,35 +418,48 @@ with gr.Blocks() as demo:
         )
         # 메시지 전송 시 함수 연결
         msg.submit(
-            fn=user_message,
-            inputs=[msg, session_id_state, history_state, system_message_box],  # 세 번째 파라미터 추가
-            outputs=[msg, history_state, status_text],
-            queue=False
-        ).then(
-            fn=bot_message,
-            inputs=bot_message_inputs,
-            outputs=[history_state, status_text],
-            queue=True
-        ).then(
-            fn=filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=chatbot,
+            fn=process_message,
+            inputs=[
+                msg,  # 사용자 입력
+                session_id_state,
+                history_state,
+                system_message_box,
+                model_dropdown,
+                custom_model_path_state,
+                image_input,
+                api_key_text,
+                selected_device_state,
+                seed_state
+            ],
+            outputs=[
+                msg,            # 사용자 입력 필드 초기화
+                history_state,  # 히스토리 업데이트
+                chatbot,        # Chatbot UI 업데이트
+                status_text     # 상태 메시지 업데이트
+            ],
             queue=False
         )
+
         send_btn.click(
-            fn=user_message,
-            inputs=[msg, session_id_state, history_state, system_message_box],
-            outputs=[msg, history_state, status_text],
-            queue=False
-        ).then(
-            fn=bot_message,
-            inputs=bot_message_inputs,
-            outputs=[history_state, status_text],
-            queue=True
-        ).then(
-            fn=filter_messages_for_chatbot,            # 추가된 부분
-            inputs=[history_state],
-            outputs=chatbot,                           # chatbot에 최종 전달
+            fn=process_message,
+            inputs=[
+                msg, 
+                session_id_state, 
+                history_state, 
+                system_message_box, 
+                model_dropdown, 
+                custom_model_path_state, 
+                image_input, 
+                api_key_text, 
+                selected_device_state, 
+                seed_state
+            ],
+            outputs=[
+                msg, 
+                history_state, 
+                chatbot, 
+                status_text
+            ],
             queue=False
         )
     
