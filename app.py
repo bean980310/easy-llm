@@ -173,7 +173,7 @@ def process_message(user_input, session_id, history, system_msg, selected_model,
                 )
             ),
             local_model_path=custom_path if selected_model == "사용자 지정 모델 경로 변경" else None,
-            image=image,
+            image_input=image,
             api_key=api_key,
             device=device,
             seed=seed
