@@ -280,19 +280,8 @@ def insert_default_presets(translation_manager) -> None:
         logger.error(f"Unexpected error during preset insertion: {e}")
         raise PresetInsertionError(f"Failed to insert default presets: {e}")
     
-# 시스템 메시지 프리셋 불러오기
 def load_system_presets(language: str) -> Dict[str, str]:
-    """시스템 메시지 프리셋을 불러옵니다.
-
-    Args:
-        language: 언어 코드
-
-    Returns:
-        Dict[str, str]: 프리셋 이름과 내용을 담은 딕셔너리
-
-    Raises:
-        PresetManagementError: 프리셋 로딩 중 오류 발생 시
-    """
+    """시스템 메시지 프리셋을 불러옵니다."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -302,14 +291,14 @@ def load_system_presets(language: str) -> Dict[str, str]:
                 WHERE language = ? 
                 ORDER BY name ASC
             """, (language,))
-            return dict(cursor.fetchall())
+            results = cursor.fetchall()
+            # 딕셔너리로 변환하여 반환
+            return {name: content for name, content in results} if results else {}
             
     except sqlite3.Error as e:
         logger.error(f"Error loading presets for language {language}: {e}")
-        raise PresetManagementError(f"Failed to load presets: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error loading presets: {e}")
         return {}
+
 
 def add_system_preset(
     name: str,
@@ -433,14 +422,24 @@ def preset_exists(name: str, language: str) -> bool:
         logger.error(f"Unexpected error checking preset existence: {e}")
         return False
     
-def get_preset_choices(language):
-    presets = load_system_presets(language)
-    return sorted(presets.keys())
-
-# 초기 로드 시 프리셋 Dropdown 업데이트
-def initial_load_presets(language):
-    presets = get_preset_choices(language)
-    return gr.update(choices=presets)
+def get_preset_choices(language: str) -> List[str]:
+    """프리셋 선택 목록을 가져옵니다."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT name 
+                FROM system_presets 
+                WHERE language = ? 
+                ORDER BY name ASC
+            """, (language,))
+            results = cursor.fetchall()
+            # 이름 목록만 반환
+            return [name[0] for name in results] if results else []
+            
+    except sqlite3.Error as e:
+        logger.error(f"Error getting preset choices for language {language}: {e}")
+        return []
 
 # 프리셋 추가 핸들러
 def handle_add_preset(name, language, content, confirm_overwrite=False):

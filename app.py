@@ -24,7 +24,6 @@ from database import (
     ensure_demo_session,
     load_chat_from_db, 
     load_system_presets, 
-    initial_load_presets, 
     get_existing_sessions, 
     save_chat_button_click, 
     save_chat_history_csv, 
@@ -35,7 +34,7 @@ from database import (
     get_preset_choices,
     delete_session_history,
     delete_all_sessions,
-    insert_default_presets)
+    insert_default_presets,)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
@@ -121,23 +120,27 @@ def initialize_app():
     insert_default_presets(translation_manager)
     return on_app_start(default_language)
 
-def on_app_start(language):
+def on_app_start(language=None):  # language 매개변수에 기본값 설정
     """
     Gradio 앱이 로드되면서 실행될 콜백.
-    - 세션 ID를 정하고,
-    - 해당 세션의 히스토리를 DB에서 불러온 뒤 반환.
-    - 기본 시스템 메시지 불러오기
     """
-    sid = "demo_session"  # 데모용 세션
-    logger.info(f"앱 시작 시 세션 ID: {sid}")  # 디버깅 로그 추가
+    if language is None:
+        language = default_language
+        
+    sid = "demo_session"
+    logger.info(f"앱 시작 시 세션 ID: {sid}")
     loaded_history = load_chat_from_db(sid)
-    logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
+    logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")
+    
+    sessions = get_existing_sessions()
+    logger.info(f"불러온 세션 목록: {sessions}")
 
-    # 기본 시스템 메시지 설정 (프리셋이 없는 경우)
+    presets = load_system_presets(language=language)
+    logger.info(f"로드된 프리셋: {presets}")
+    
     if not loaded_history:
         system_presets = load_system_presets(language)
         if len(system_presets) > 0:
-            # 첫 번째 시스템 프리셋 사용
             preset_name = list(system_presets.keys())[0]
             default_system = {
                 "role": "system",
@@ -147,10 +150,16 @@ def on_app_start(language):
         else:
             default_system = {
                 "role": "system",
-                "content": "당신은 유용한 AI 비서입니다."  # 기본값
+                "content": "당신은 유용한 AI 비서입니다."
             }
             loaded_history = [default_system]
-    return sid, loaded_history
+            
+    return (
+        sid, 
+        loaded_history,
+        gr.update(choices=sessions, value=sid if sessions else None),
+        f"현재 세션: {sid}"
+    )
 
 def process_message(user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed):
     """
@@ -242,63 +251,73 @@ def filter_messages_for_chatbot(history):
             messages_for_chatbot.append({"role": msg["role"], "content": content})
     return messages_for_chatbot
 
-def reset_session(history, chatbot, system_message_default, language):
+def reset_session(history, chatbot, system_message_default, language=None):
     """
     특정 세션을 초기화하는 함수.
     """
+    if language is None:
+        language = default_language
+        
     try:
-        # 데이터베이스에서 해당 세션 삭제
-        success = delete_session_history("demo_session")  # 현재 세션 ID 사용
+        success = delete_session_history("demo_session")
         if not success:
             return gr.update(), history, filter_messages_for_chatbot(history), "❌ 세션 초기화에 실패했습니다."
 
-        # 히스토리 초기화 (기본 시스템 메시지로 재설정)
         default_system = {
             "role": "system",
-            "content": system_message_default  # 기본 시스템 메시지 내용
+            "content": system_message_default
         }
         new_history = [default_system]
 
-        # 데이터베이스에 초기 히스토리 저장
-        save_chat_history_db(new_history, session_id="demo_session")  # 기본 세션 ID 사용
-
-        # 챗봇 UI 업데이트
+        save_chat_history_db(new_history, session_id="demo_session")
         chatbot_history = filter_messages_for_chatbot(new_history)
 
         return "", new_history, chatbot_history, "✅ 세션이 초기화되었습니다."
 
     except Exception as e:
-        logger.error(f"Error resetting session: {str(e)}", exc_info=True)
+        logger.error(f"Error resetting session: {str(e)}")
         return "", history, filter_messages_for_chatbot(history), f"❌ 세션 초기화 중 오류가 발생했습니다: {str(e)}"
 
-def reset_all_sessions(history, chatbot, system_message_default, language):
+def reset_all_sessions(history, chatbot, system_message_default, language=None):
     """
     모든 세션을 초기화하는 함수.
     """
+    if language is None:
+        language = default_language
+        
     try:
-        # 데이터베이스에서 모든 세션 삭제
         success = delete_all_sessions()
         if not success:
             return gr.update(), history, filter_messages_for_chatbot(history), "❌ 모든 세션 초기화에 실패했습니다."
 
-        # 히스토리 초기화 (기본 시스템 메시지로 재설정)
         default_system = {
             "role": "system",
-            "content": system_message_default  # 기본 시스템 메시지 내용
+            "content": system_message_default
         }
         new_history = [default_system]
 
-        # 데이터베이스에 초기 히스토리 저장
-        save_chat_history_db(new_history, session_id="demo_session")  # 기본 세션 ID 사용
-
-        # 챗봇 UI 업데이트
+        save_chat_history_db(new_history, session_id="demo_session")
         chatbot_history = filter_messages_for_chatbot(new_history)
 
         return "", new_history, chatbot_history, "✅ 모든 세션이 초기화되었습니다."
 
     except Exception as e:
-        logger.error(f"Error resetting all sessions: {str(e)}", exc_info=True)
+        logger.error(f"Error resetting all sessions: {str(e)}")
         return "", history, filter_messages_for_chatbot(history), f"❌ 모든 세션 초기화 중 오류가 발생했습니다: {str(e)}"
+
+def refresh_preset_list(language=None):
+    """프리셋 목록을 갱신하는 함수."""
+    if language is None:
+        language = default_language
+    presets = get_preset_choices(language)
+    return gr.update(choices=presets, value=presets[0] if presets else None)
+
+def initial_load_presets(language=None):
+    """초기 프리셋 로딩 함수"""
+    if language is None:
+        language = default_language
+    presets = get_preset_choices(language)
+    return gr.update(choices=presets, value=presets[0] if presets else None)
 
 initialize_app()
 
@@ -611,27 +630,14 @@ with gr.Blocks() as demo:
         
         # 초기화 버튼 클릭 시 확인 메시지 표시
         reset_btn.click(
-            fn=lambda: True,
-            inputs=[],
-            outputs=[reset_confirmation],
-            queue=False
-        ).then(
-            fn=lambda confirm: gr.update(visible=confirm),
-            inputs=[reset_confirmation],
-            outputs=[reset_confirm_row],
-            queue=False
+            fn=reset_session,
+            inputs=[history_state, chatbot, system_message_box, selected_language_state],
+            outputs=[msg, history_state, chatbot, status_text]
         )
-
         reset_all_btn.click(
-            fn=lambda: True,
-            inputs=[],
-            outputs=[reset_all_confirmation],
-            queue=False
-        ).then(
-            fn=lambda confirm: gr.update(visible=confirm),
-            inputs=[reset_all_confirmation],
-            outputs=[reset_all_confirm_row],
-            queue=False
+            fn=reset_all_sessions,
+            inputs=[history_state, chatbot, system_message_box, selected_language_state],
+            outputs=[msg, history_state, chatbot, status_text]
         )
 
         # "예" 버튼 클릭 시 세션 초기화 수행
@@ -1353,10 +1359,15 @@ with gr.Blocks() as demo:
         with gr.Accordion("시스템 메시지 프리셋 관리", open=False):
             with gr.Row():
                 preset_dropdown = gr.Dropdown(
-                    label="프리셋 선택",
-                    choices=[],  # 초기 로드에서 채워짐
-                    value=None,
-                    interactive=True
+                    label="프리셋 선택",  # 필요 시 번역 키로 변경
+                    choices=get_preset_choices(default_language),
+                    value=get_preset_choices(default_language)[0] if get_preset_choices(default_language) else None
+                )
+                refresh_preset_button = gr.Button("프리셋 목록 갱신")
+                refresh_preset_button.click(
+                    fn=refresh_preset_list,
+                    inputs=[selected_language_state],
+                    outputs=[preset_dropdown]
                 )
                 apply_preset_btn = gr.Button("프리셋 적용")
         
@@ -1460,22 +1471,29 @@ with gr.Blocks() as demo:
             )
         
             # 프리셋 적용 이벤트 수정
-            def apply_preset(name, session_id, history):
+            def apply_preset(name, session_id, history, language=None):
                 if not name:
                     return "❌ 적용할 프리셋을 선택해주세요.", history, gr.update()
-                presets = load_system_presets()
+                
+                if language is None:
+                    language = "ko"
+                    
+                presets = load_system_presets(language)
                 content = presets.get(name, "")
                 if not content:
                     return "❌ 선택한 프리셋에 내용이 없습니다.", history, gr.update()
         
                 # 현재 세션의 히스토리를 초기화하고 시스템 메시지 추가
                 new_history = [{"role": "system", "content": content}]
+                success = save_chat_history_db(new_history, session_id=session_id)
+                if not success:
+                    return "❌ 프리셋 적용 중 오류가 발생했습니다.", history, gr.update()
                 logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
                 return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content)
         
             apply_preset_btn.click(
                 fn=apply_preset,
-                inputs=[preset_dropdown, session_id_state, history_state],
+                inputs=[preset_dropdown, session_id_state, history_state, selected_language_state],
                 outputs=[preset_info, history_state, system_message_box]
             ).then(
                 fn=filter_messages_for_chatbot,
@@ -1568,6 +1586,11 @@ with gr.Blocks() as demo:
                     choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
                     value=None,
                     interactive=True
+                )
+                current_session_display = gr.Textbox(
+                    label="현재 세션 ID",
+                    value="",
+                    interactive=False
                 )
             
             with gr.Row():
@@ -1860,5 +1883,13 @@ with gr.Blocks() as demo:
             inputs=[user_input_sd, selected_model_sd, model_type_sd, custom_model_path_sd, api_key_sd],
             outputs=prompt_output_sd
         )
-
+        
+    demo.load(
+        fn=on_app_start,
+        inputs=[selected_language_state],  # 언어 상태를 입력으로 전달
+        outputs=[session_id_state, history_state, existing_sessions_dropdown,
+        current_session_display],
+        queue=False
+    )
+    
 demo.launch(debug=True, inbrowser=True, server_port=7861, width=800)
