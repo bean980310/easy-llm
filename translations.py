@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import logging
+from presets import MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
 
 logger = logging.getLogger(__name__)
 class TranslationManager:
