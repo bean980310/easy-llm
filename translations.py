@@ -125,6 +125,9 @@ class TranslationManager:
                 'hub_cancel_button': '취소',
                 'hub_details_label': '상세 정보',
                 'hub_download_log_label': '다운로드 로그',
+                "cache_tab_title": "캐시",
+                "refresh_model_list_button": "모델 목록 새로고침",
+                "cache_clear_all_button": "모든 모델 캐시 삭제",
                 # 추가 번역키들...
             },
             'ja': {
@@ -200,6 +203,9 @@ class TranslationManager:
                 'hub_cancel_button': 'キャンセル',
                 'hub_details_label': '詳細情報',
                 'hub_download_log_label': 'ダウンロードログ',
+                "cache_tab_title": "キャッシュ",
+                "refresh_model_list_button": "モデルリスト更新",
+                "cache_clear_all_button": "すべてのモデルキャッシュを削除",
                 # 追加の翻訳キー...
             },
             'zh_CN': {
@@ -275,6 +281,9 @@ class TranslationManager:
                 'hub_cancel_button': '取消',
                 'hub_details_label': '详细信息',
                 'hub_download_log_label': '下载日志',
+                "cache_tab_title": "高速缓存",
+                "refresh_model_list_button": "更新模型列表",
+                "cache_clear_all_button": "删除所有模型缓存",
                 # 其他翻译键...
             },
             'zh_TW': {
@@ -350,6 +359,9 @@ class TranslationManager:
                 'hub_cancel_button': '取消',
                 'hub_details_label': '詳細資訊',
                 'hub_download_log_label': '下載日誌',
+                "cache_tab_title": "高速緩存",
+                "refresh_model_list_button": "更新模型列表",
+                "cache_clear_all_button": "刪除所有模型緩存",
             },
             'en': {
                 'main_title': 'Simple Chatbot',
@@ -424,6 +436,9 @@ class TranslationManager:
                 'hub_cancel_button': 'Cancel',
                 'hub_details_label': 'Details',
                 'hub_download_log_label': 'Download Log',
+                "cache_tab_title": "Cache",
+                "refresh_model_list_button": "Refresh Model List",
+                "cache_clear_all_button": "Delete all model caches",
                 # Additional translation keys...
             }
         }

@@ -1202,13 +1202,13 @@ with gr.Blocks() as demo:
             ]
         )
         
-    with gr.Tab("캐시"):
+    with gr.Tab(_("cache_tab_title")):
         with gr.Row():
             with gr.Column():
-                refresh_button = gr.Button("모델 목록 새로고침")
+                refresh_button = gr.Button(_("refresh_model_list_button"))
                 refresh_info = gr.Textbox(label="새로고침 결과", interactive=False)
             with gr.Column():
-                clear_all_btn = gr.Button("모든 모델 캐시 삭제")
+                clear_all_btn = gr.Button(_("cache_clear_all_button"))
                 clear_all_result = gr.Textbox(label="결과", interactive=False)
 
         def refresh_model_list():
