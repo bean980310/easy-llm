@@ -509,7 +509,7 @@ def get_existing_sessions() -> List[str]:
         logger.error(f"Error retrieving sessions: {e}")
         return []
     
-def save_chat_history_db(history: List[Dict[str, Any]], session_id: str = "session_1") -> bool:
+def save_chat_history_db(history, session_id="demo_session") -> bool:
     """Save chat history to SQLite database"""
     try:
         with get_db_connection() as conn:
@@ -520,35 +520,52 @@ def save_chat_history_db(history: List[Dict[str, Any]], session_id: str = "sessi
                     session_id TEXT NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
                 )
             """)
-
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_activity DATETIME
+                )
+            """)
+            
+            # 세션 존재 여부 확인
+            cursor.execute("SELECT COUNT(*) FROM sessions WHERE id = ?", (session_id,))
+            if cursor.fetchone()[0] == 0:
+                # 세션이 존재하지 않으면 생성
+                current_time = datetime.now().isoformat()
+                cursor.execute("""
+                    INSERT INTO sessions (id, name, created_at, updated_at, last_activity)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (session_id, f"Session {session_id}", current_time, current_time, current_time))
+                logger.info(f"Created new session: {session_id}")
+            
             for msg in history:
-                # Check for duplicate messages
                 cursor.execute("""
                     SELECT COUNT(*) FROM chat_history
                     WHERE session_id = ? AND role = ? AND content = ?
                 """, (session_id, msg.get("role"), msg.get("content")))
-                
-                if cursor.fetchone()[0] == 0:
+                count = cursor.fetchone()[0]
+
+                if count == 0:
                     cursor.execute("""
-                        INSERT INTO chat_history (session_id, role, content, timestamp)
-                        VALUES (?, ?, ?, ?)
-                    """, (session_id, msg.get("role"), msg.get("content"), datetime.now()))
-            
+                        INSERT INTO chat_history (session_id, role, content)
+                        VALUES (?, ?, ?)
+                    """, (session_id, msg.get("role"), msg.get("content")))
+
             conn.commit()
-            logger.info(f"Chat history saved successfully (session_id={session_id})")
+            logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
             return True
-            
-    except sqlite3.IntegrityError as e:
-        logger.error(f"Database integrity error: {e}")
-        return False
     except sqlite3.OperationalError as e:
-        logger.error(f"Database operational error: {e}")
+        logger.error(f"DB 작업 중 오류: {e}")
         return False
     except Exception as e:
-        logger.error(f"Unexpected error saving chat history: {e}")
+        logger.error(f"Error saving chat history to DB: {e}")
         return False
     
 def save_chat_history(history):

@@ -49,9 +49,17 @@ formatter = logging.Formatter(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+PRESET_IMAGES = {
+    "MINAMI_ASUKA_PRESET": os.path.join("assets", "1_minami_asuka.png"),
+    "MAKOTONO_AOI_PRESET": os.path.join("assets", "2_makotono_aoi.png"),
+    "AINO_KOITO_PRESET": os.path.join("assets", "3_aino_koito.png"),
+}
+
+DEFAULT_PROFILE_IMAGE = None
+
 def handle_change_preset(new_preset_name, history, language):
     """
-    프리셋을 변경하고, 새로운 시스템 메시지를 히스토리에 추가합니다.
+    프리셋을 변경하고, 새로운 시스템 메시지를 히스토리에 추가하며, 프로필 이미지를 변경합니다.
 
     Args:
         new_preset_name (str): 선택된 새로운 프리셋의 이름.
@@ -59,24 +67,32 @@ def handle_change_preset(new_preset_name, history, language):
         language (str): 현재 선택된 언어.
 
     Returns:
-        list: 업데이트된 대화 히스토리.
+        tuple: 업데이트된 대화 히스토리, 새로운 프로필 이미지 경로.
     """
     # 새로운 프리셋 내용 로드
     presets = load_system_presets(language=language)
+    
     if new_preset_name not in presets:
         logger.warning(f"선택한 프리셋 '{new_preset_name}'이 존재하지 않습니다.")
-        return history
+        return history, DEFAULT_PROFILE_IMAGE  # 프리셋이 없을 경우 기본 이미지 반환
 
     new_system_message = {
         "role": "system",
         "content": presets[new_preset_name]
     }
+    content = presets.get(new_preset_name, "")
 
     # 기존 히스토리에 새로운 시스템 메시지 추가
     history.append(new_system_message)
     logger.info(f"프리셋 '{new_preset_name}'로 변경되었습니다.")
 
-    return history
+    # 프로필 이미지 변경
+    image_path = PRESET_IMAGES.get(new_preset_name)
+    
+    if image_path and os.path.isfile(image_path):
+        return history, gr.update(value=content), image_path
+    else:
+        return history, gr.update(value=content), None
 
 # 콘솔 핸들러 추가
 console_handler = logging.StreamHandler()
@@ -91,11 +107,6 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
-PRESET_IMAGES = {
-    "MINAMI_ASUKA_PRESET": "./assets/1_minami_asuka.png",
-    "MAKOTONO_AOI_PRESET": "./assets/2_makotono_aoi.png",
-    "AINO_KOITO_PRESET": "./assets/3_aino_koito.png",
-}
 
 api_models = [
     "gpt-3.5-turbo",
@@ -283,7 +294,12 @@ def filter_messages_for_chatbot(history):
     for msg in history:
         if msg["role"] in ("user", "assistant"):
             content = msg["content"] or ""
-            messages_for_chatbot.append({"role": msg["role"], "content": content})
+            character = msg.get("character", "")
+            if character:
+                display_content = f"**{character}:** {content}"
+            else:
+                display_content = content
+            messages_for_chatbot.append({"role": msg["role"], "content": display_content})
     return messages_for_chatbot
 
 def reset_session(history, chatbot, system_message_default, language=None):
@@ -354,10 +370,52 @@ def initial_load_presets(language=None):
     presets = get_preset_choices(language)
     return gr.update(choices=presets, value=presets[0] if presets else None)
 
+
+def process_character_conversation(history, selected_characters, model_type, selected_model, custom_path, image, api_key, device, seed):
+    try:
+        for i, character in enumerate(selected_characters):
+            # 각 캐릭터의 시스템 메시지 설정
+            system_message = {
+                "role": "system",
+                "content": translation_manager.get_character_setting(character)
+            }
+            history.append(system_message)
+            
+            # 캐릭터의 응답 생성
+            answer = generate_answer(
+                history=history,
+                selected_model=selected_model,
+                model_type=model_type,
+                local_model_path=custom_path if selected_model == "사용자 지정 모델 경로 변경" else None,
+                image_input=image,
+                api_key=api_key,
+                device=device,
+                seed=seed
+            )
+            
+            history.append({
+                "role": "assistant",
+                "content": answer,
+                "character": character
+            })
+        
+        # 데이터베이스에 히스토리 저장
+        save_chat_history_db(history, session_id="character_conversation")
+        
+        # 프로필 이미지는 None으로 반환
+        return history, None  # 여기서 None을 반환하도록 수정
+
+    except Exception as e:
+        logger.error(f"Error generating character conversation: {str(e)}", exc_info=True)
+        history.append({"role": "assistant", "content": f"❌ 오류 발생: {str(e)}", "character": "System"})
+        return history, None  # 오류 발생시에도 None 반환
+    
 initialize_app()
 
 with gr.Blocks() as demo:
-    history_state = gr.State([])
+    
+    session_id, loaded_history, session_dropdown, session_label=on_app_start()
+    history_state = gr.State(loaded_history)
     overwrite_state = gr.State(False) 
 
     # 단일 history_state와 selected_device_state 정의 (중복 제거)
@@ -418,13 +476,6 @@ with gr.Blocks() as demo:
             )
             change_preset_button = gr.Button("프리셋 변경")
 
-            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
-            change_preset_button.click(
-                fn=handle_change_preset,
-                inputs=[preset_dropdown, history_state, selected_language_state],
-                outputs=[history_state]
-            )
-
             image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
             with gr.Row():
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
@@ -434,8 +485,10 @@ with gr.Blocks() as demo:
                     interactive=False,
                     show_label=True,
                     width=400,
-                    height=400
+                    height=400,
+                    value=None
                 )
+                
             with gr.Row():
                 msg = gr.Textbox(
                     label=_("message_input_label"),
@@ -458,12 +511,28 @@ with gr.Blocks() as demo:
                     interactive=True,
                     info=_("seed_info")
                 )
+                
+            with gr.Row():
+                character_dropdown = gr.CheckboxGroup(
+                    label="대화할 캐릭터 선택",
+                    choices=get_preset_choices(default_language),  # 추가 캐릭터 이름
+                    value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
+                    interactive=True
+                )
+                start_conversation_button = gr.Button("대화 시작")
                         
             # 시드 입력과 상태 연결
             seed_input.change(
                 fn=lambda seed: seed if seed is not None else 42,
                 inputs=[seed_input],
                 outputs=[seed_state]
+            )
+            
+            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
+            change_preset_button.click(
+                fn=handle_change_preset,
+                inputs=[preset_dropdown, history_state, selected_language_state],
+                outputs=[history_state, system_message_box, profile_image]
             )
             
             with gr.Row():
@@ -657,6 +726,26 @@ with gr.Blocks() as demo:
             inputs=[history_state],
             outputs=chatbot,
             queue=False
+        )
+        
+        start_conversation_button.click(
+            fn=process_character_conversation,
+            inputs=[
+                history_state,
+                character_dropdown,
+                model_type_dropdown, 
+                model_dropdown,
+                custom_model_path_state,
+                image_input,
+                api_key_text,
+                selected_device_state,
+                seed_state
+            ],
+            outputs=[history_state, profile_image]
+        ).then(
+            fn=filter_messages_for_chatbot,  # 히스토리를 채팅창에 표시하기 위한 필터링
+            inputs=[history_state],
+            outputs=[chatbot]
         )
 
         send_btn.click(
