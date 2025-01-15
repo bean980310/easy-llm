@@ -62,6 +62,12 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
+PRESET_IMAGES = {
+    "MINAMI_ASUKA_PRESET": "./assets/1_minami_asuka.png",
+    "MAKOTONO_AOI_PRESET": "./assets/2_makotono_aoi.png",
+    "AINO_KOITO_PRESET": "./assets/3_aino_koito.png",
+}
+
 api_models = [
     "gpt-3.5-turbo",
     "gpt-4o-mini",
@@ -379,12 +385,12 @@ with gr.Blocks() as demo:
             with gr.Row():
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
                 profile_image = gr.Image(
-                    value=character_image_path,
                     label=_('profile_image_label'),
                     visible=True,
                     interactive=False,
-                    width="500px",
-                    height="500px"
+                    show_label=True,
+                    width=400,
+                    height=400
                 )
             with gr.Row():
                 msg = gr.Textbox(
@@ -1497,12 +1503,14 @@ with gr.Blocks() as demo:
                 if not success:
                     return "❌ 프리셋 적용 중 오류가 발생했습니다.", history, gr.update()
                 logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
-                return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content)
+                
+                image_path = PRESET_IMAGES.get(name)
+                return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content), gr.update(value=image_path) if image_path else gr.update()
         
             apply_preset_btn.click(
                 fn=apply_preset,
                 inputs=[preset_dropdown, session_id_state, history_state, selected_language_state],
-                outputs=[preset_info, history_state, system_message_box]
+                outputs=[preset_info, history_state, system_message_box, profile_image]
             ).then(
                 fn=filter_messages_for_chatbot,
                 inputs=[history_state],
