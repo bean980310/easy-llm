@@ -49,6 +49,35 @@ formatter = logging.Formatter(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+def handle_change_preset(new_preset_name, history, language):
+    """
+    프리셋을 변경하고, 새로운 시스템 메시지를 히스토리에 추가합니다.
+
+    Args:
+        new_preset_name (str): 선택된 새로운 프리셋의 이름.
+        history (list): 현재 대화 히스토리.
+        language (str): 현재 선택된 언어.
+
+    Returns:
+        list: 업데이트된 대화 히스토리.
+    """
+    # 새로운 프리셋 내용 로드
+    presets = load_system_presets(language=language)
+    if new_preset_name not in presets:
+        logger.warning(f"선택한 프리셋 '{new_preset_name}'이 존재하지 않습니다.")
+        return history
+
+    new_system_message = {
+        "role": "system",
+        "content": presets[new_preset_name]
+    }
+
+    # 기존 히스토리에 새로운 시스템 메시지 추가
+    history.append(new_system_message)
+    logger.info(f"프리셋 '{new_preset_name}'로 변경되었습니다.")
+
+    return history
+
 # 콘솔 핸들러 추가
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
@@ -167,7 +196,7 @@ def on_app_start(language=None):  # language 매개변수에 기본값 설정
         f"현재 세션: {sid}"
     )
 
-def process_message(user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed):
+def process_message(user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed, language):
     """
     사용자 메시지를 처리하고 봇 응답을 생성하는 통합 함수.
 
@@ -381,6 +410,21 @@ with gr.Blocks() as demo:
         )
         image_info = gr.Markdown("", visible=False)
         with gr.Column():
+            preset_dropdown = gr.Dropdown(
+                label="프리셋 선택",
+                choices=get_preset_choices(default_language),
+                value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
+                interactive=True
+            )
+            change_preset_button = gr.Button("프리셋 변경")
+
+            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
+            change_preset_button.click(
+                fn=handle_change_preset,
+                inputs=[preset_dropdown, history_state, selected_language_state],
+                outputs=[history_state]
+            )
+
             image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
             with gr.Row():
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
@@ -598,7 +642,8 @@ with gr.Blocks() as demo:
                 image_input,
                 api_key_text,
                 selected_device_state,
-                seed_state
+                seed_state,
+                selected_language_state
             ],
             outputs=[
                 msg,            # 사용자 입력 필드 초기화
@@ -626,7 +671,8 @@ with gr.Blocks() as demo:
                 image_input, 
                 api_key_text, 
                 selected_device_state, 
-                seed_state
+                seed_state,
+                selected_language_state
             ],
             outputs=[
                 msg, 

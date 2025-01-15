@@ -69,6 +69,7 @@ def get_db_connection():
     conn = None
     try:
         conn = sqlite3.connect("chat_history.db", timeout=10)
+        conn.execute("PRAGMA foreign_keys = ON")
         yield conn
     except sqlite3.Error as e:
         logger.error(f"Database connection error: {e}")
@@ -76,7 +77,22 @@ def get_db_connection():
     finally:
         if conn:
             conn.close()
-            
+def backfill_timestamps():
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # 'timestamp' 열이 NULL인 경우 현재 시간으로 업데이트
+            cursor.execute("""
+                UPDATE chat_history
+                SET timestamp = CURRENT_TIMESTAMP
+                WHERE timestamp IS NULL
+            """)
+            affected_rows = cursor.rowcount
+            conn.commit()
+            logger.info(f"Backfilled timestamps for {affected_rows} chat_history records.")
+    except Exception as e:
+        logger.error(f"Error backfilling timestamps: {e}")
+        
 def initialize_database() -> None:
     """데이터베이스와 필요한 테이블들을 초기화합니다.
     
@@ -106,6 +122,7 @@ def initialize_database() -> None:
                     session_id TEXT NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -134,6 +151,15 @@ def initialize_database() -> None:
                 ON system_presets(language)
             """)
             
+            cursor.execute("PRAGMA table_info(chat_history)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'timestamp' not in columns:
+                cursor.execute("ALTER TABLE chat_history ADD COLUMN timestamp DATETIME DEFAULT (CURRENT_TIMESTAMP)")
+                logger.info("'chat_history' 테이블에 'timestamp' 열 추가 완료.")
+                backfill_timestamps()
+            else:
+                logger.info("'chat_history' 테이블에 'timestamp' 열이 이미 존재합니다.")
+                
             conn.commit()
             logger.info("Database initialized successfully")
             
@@ -507,9 +533,9 @@ def save_chat_history_db(history: List[Dict[str, Any]], session_id: str = "sessi
                 
                 if cursor.fetchone()[0] == 0:
                     cursor.execute("""
-                        INSERT INTO chat_history (session_id, role, content)
-                        VALUES (?, ?, ?)
-                    """, (session_id, msg.get("role"), msg.get("content")))
+                        INSERT INTO chat_history (session_id, role, content, timestamp)
+                        VALUES (?, ?, ?, ?)
+                    """, (session_id, msg.get("role"), msg.get("content"), datetime.now()))
             
             conn.commit()
             logger.info(f"Chat history saved successfully (session_id={session_id})")
