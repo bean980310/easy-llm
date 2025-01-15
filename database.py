@@ -15,8 +15,10 @@ def initialize_presets_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_presets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                content TEXT NOT NULL
+                name TEXT NOT NULL,
+                language TEXT NOT NULL,
+                content TEXT NOT NULL,
+                UNIQUE(name, language)
             )
         """)
         conn.commit()
@@ -28,12 +30,40 @@ def initialize_presets_db():
 # 앱 시작 시 DB 초기화 함수 호출
 initialize_presets_db()
 
+def insert_default_presets(translation_manager):
+    default_presets = ['MINAMI_ASUKA_PRESET', 'MAKOTONO_AOI_PRESET', 'AINO_KOITO_PRESET']
+    languages = translation_manager.get_available_languages()
+    
+    conn = sqlite3.connect("chat_history.db")
+    cursor = conn.cursor()
+    
+    for preset in default_presets:
+        for lang in languages:
+            # 이미 존재하는지 확인
+            cursor.execute("SELECT * FROM system_presets WHERE name = ? AND language = ?", (preset, lang))
+            if cursor.fetchone() is None:
+                # translation_manager에서 해당 프리셋의 내용을 가져옴
+                if preset == 'MINAMI_ASUKA_PRESET':
+                    content = translation_manager.get_character_setting('minami_asuka')
+                elif preset == 'MAKOTONO_AOI_PRESET':
+                    content = translation_manager.get_character_setting('makotono_aoi')
+                elif preset == 'AINO_KOITO_PRESET':
+                    content = translation_manager.get_character_setting('aino_koito')
+                else:
+                    content = "Default content"
+                
+                cursor.execute("INSERT INTO system_presets (name, language, content) VALUES (?, ?, ?)", (preset, lang, content))
+                logger.info(f"Inserted default preset: {preset} (language: {lang})")
+    
+    conn.commit()
+    conn.close()
+    
 # 시스템 메시지 프리셋 불러오기
-def load_system_presets():
+def load_system_presets(language):
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT name, content FROM system_presets ORDER BY name ASC")
+        cursor.execute("SELECT name, content FROM system_presets WHERE language = ? ORDER BY name ASC", (language,))
         rows = cursor.fetchall()
         conn.close()
         presets = {name: content for name, content in rows}
@@ -43,51 +73,55 @@ def load_system_presets():
         return {}
 
 # 새로운 시스템 메시지 프리셋 추가
-def add_system_preset(name, content, overwrite=False):
+def add_system_preset(name, language, content, overwrite=False):
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
         if overwrite:
             cursor.execute("""
                 UPDATE system_presets SET content = ?
-                WHERE name = ?
-            """, (content, name))
-            logger.info(f"프리셋 업데이트: {name}")
+                WHERE name = ? AND language = ?
+            """, (content, name, language))
+            logger.info(f"프리셋 업데이트: {name} (언어: {language})")
         else:
             cursor.execute("""
-                INSERT INTO system_presets (name, content) 
-                VALUES (?, ?)
-            """, (name, content))
-            logger.info(f"프리셋 추가: {name}")
+                INSERT INTO system_presets (name, language, content) 
+                VALUES (?, ?, ?)
+            """, (name, language, content))
+            logger.info(f"프리셋 추가: {name} (언어: {language})")
         conn.commit()
         conn.close()
         return True, "프리셋이 성공적으로 저장되었습니다."
     except sqlite3.IntegrityError:
-        logger.warning(f"프리셋 '{name}'이(가) 이미 존재합니다.")
+        logger.warning(f"프리셋 '{name}' (언어: {language})이(가) 이미 존재합니다.")
         return False, "프리셋이 이미 존재합니다."
     except Exception as e:
         logger.error(f"시스템 메시지 프리셋 저장 오류: {e}")
         return False, f"오류 발생: {e}"
 
 # 시스템 메시지 프리셋 삭제
-def delete_system_preset(name):
+def delete_system_preset(name, language):
+    default_presets = ['MINAMI_ASUKA_PRESET', 'MAKOTONO_AOI_PRESET', 'AINO_KOITO_PRESET']
+    if name in default_presets:
+        logger.warning(f"기본 프리셋 '{name}' (언어: {language}) 삭제 시도됨. 삭제 불가.")
+        return False, "기본 프리셋은 삭제할 수 없습니다."
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM system_presets WHERE name = ?", (name,))
+        cursor.execute("DELETE FROM system_presets WHERE name = ? AND language = ?", (name, language))
         conn.commit()
         conn.close()
-        logger.info(f"시스템 메시지 프리셋 삭제: {name}")
+        logger.info(f"시스템 메시지 프리셋 삭제: {name} (언어: {language})")
         return True, "프리셋이 성공적으로 삭제되었습니다."
     except Exception as e:
         logger.error(f"시스템 메시지 프리셋 삭제 오류: {e}")
         return False, f"오류 발생: {e}"
     
-def preset_exists(name):
+def preset_exists(name, language):
     try:
         conn = sqlite3.connect("chat_history.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM system_presets WHERE name = ?", (name,))
+        cursor.execute("SELECT COUNT(*) FROM system_presets WHERE name = ? AND language = ?", (name, language))
         count = cursor.fetchone()[0]
         conn.close()
         return count > 0
@@ -95,44 +129,44 @@ def preset_exists(name):
         logger.error(f"프리셋 존재 여부 확인 오류: {e}")
         return False
     
-def get_preset_choices():
-    presets = load_system_presets()
+def get_preset_choices(language):
+    presets = load_system_presets(language)
     return sorted(presets.keys())
 
 # 초기 로드 시 프리셋 Dropdown 업데이트
-def initial_load_presets():
-    presets = get_preset_choices()
+def initial_load_presets(language):
+    presets = get_preset_choices(language)
     return gr.update(choices=presets)
 
 # 프리셋 추가 핸들러
-def handle_add_preset(name, content, confirm_overwrite=False):
+def handle_add_preset(name, language, content, confirm_overwrite=False):
     if not name.strip() or not content.strip():
-        return "❌ 프리셋 이름과 내용을 모두 입력해주세요.", gr.update(choices=get_preset_choices())
+        return "❌ 프리셋 이름과 내용을 모두 입력해주세요.", gr.update(choices=get_preset_choices(language)), False
     
-    exists = preset_exists(name.strip())
+    exists = preset_exists(name.strip(), language)
     
     if exists and not confirm_overwrite:
         # 프리셋이 존재하지만 덮어쓰기 확인이 이루어지지 않은 경우
-        return "⚠️ 해당 프리셋이 이미 존재합니다. 덮어쓰시겠습니까?", gr.update(choices=get_preset_choices()), True  # 추가 출력: 덮어쓰기 필요
+        return "⚠️ 해당 프리셋이 이미 존재합니다. 덮어쓰시겠습니까?", gr.update(choices=get_preset_choices(language)), True  # 추가 출력: 덮어쓰기 필요
     
-    success, message = add_system_preset(name.strip(), content.strip(), overwrite=exists)
+    success, message = add_system_preset(name.strip(), language, content.strip(), overwrite=exists)
     if success:
-        presets = get_preset_choices()
+        presets = get_preset_choices(language)
         return message, gr.update(choices=presets), False  # 덮어쓰기 완료
     else:
-        return message, gr.update(choices=get_preset_choices()), False
+        return message, gr.update(choices=get_preset_choices(language)), False
 
 
 # 프리셋 삭제 핸들러
-def handle_delete_preset(name):
+def handle_delete_preset(name, language):
     if not name:
-        return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices())
-    success, message = delete_system_preset(name)
+        return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices(language))
+    success, message = delete_system_preset(name, language)
     if success:
-        presets = get_preset_choices()
+        presets = get_preset_choices(language)
         return message, gr.update(choices=presets)
     else:
-        return message, gr.update(choices=get_preset_choices())
+        return message, gr.update(choices=get_preset_choices(language))
     
 def get_existing_sessions():
     """

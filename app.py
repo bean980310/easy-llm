@@ -32,7 +32,8 @@ from database import (
     preset_exists,
     get_preset_choices,
     delete_session_history,
-    delete_all_sessions)
+    delete_all_sessions,
+    insert_default_presets)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
@@ -107,7 +108,16 @@ default_language = detect_system_language()
 ##########################################
 # 3) Gradio UI
 ##########################################
-def on_app_start():
+def initialize_app():
+    """
+    애플리케이션 초기화 함수.
+    - 기본 프리셋 삽입
+    - 세션 초기화
+    """
+    insert_default_presets(translation_manager)
+    return on_app_start(default_language)
+
+def on_app_start(language):
     """
     Gradio 앱이 로드되면서 실행될 콜백.
     - 세션 ID를 정하고,
@@ -121,11 +131,21 @@ def on_app_start():
 
     # 기본 시스템 메시지 설정 (프리셋이 없는 경우)
     if not loaded_history:
-        default_system = {
-            "role": "system",
-            "content": system_message_box.value  # 현재 시스템 메시지 박스의 값을 사용
-        }
-        loaded_history = [default_system]
+        system_presets = load_system_presets(language)
+        if len(system_presets) > 0:
+            # 첫 번째 시스템 프리셋 사용
+            preset_name = list(system_presets.keys())[0]
+            default_system = {
+                "role": "system",
+                "content": system_presets[preset_name]
+            }
+            loaded_history = [default_system]
+        else:
+            default_system = {
+                "role": "system",
+                "content": "당신은 유용한 AI 비서입니다."  # 기본값
+            }
+            loaded_history = [default_system]
     return sid, loaded_history
 
 def process_message(user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed):
@@ -218,7 +238,7 @@ def filter_messages_for_chatbot(history):
             messages_for_chatbot.append({"role": msg["role"], "content": content})
     return messages_for_chatbot
 
-def reset_session(history, chatbot, system_message_default):
+def reset_session(history, chatbot, system_message_default, language):
     """
     특정 세션을 초기화하는 함수.
     """
@@ -247,7 +267,7 @@ def reset_session(history, chatbot, system_message_default):
         logger.error(f"Error resetting session: {str(e)}", exc_info=True)
         return "", history, filter_messages_for_chatbot(history), f"❌ 세션 초기화 중 오류가 발생했습니다: {str(e)}"
 
-def reset_all_sessions(history, chatbot, system_message_default):
+def reset_all_sessions(history, chatbot, system_message_default, language):
     """
     모든 세션을 초기화하는 함수.
     """
@@ -306,7 +326,7 @@ with gr.Blocks() as demo:
     )
     
     with gr.Tab(_("tab_main")):
-        initial_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
+        initial_choices = api_models + transformers_local + gguf_local + mlx_local
         initial_choices = list(dict.fromkeys(initial_choices))
         initial_choices = sorted(initial_choices)  # 정렬 추가
         
@@ -427,21 +447,21 @@ with gr.Blocks() as demo:
             
             # "전체 목록"이면 => API 모델 + 모든 로컬 모델 + "사용자 지정 모델 경로 변경"
             if selected_type == "all":
-                all_models = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
+                all_models = api_models + transformers_local + gguf_local + mlx_local
                 # 중복 제거 후 정렬
                 all_models = sorted(list(dict.fromkeys(all_models)))
                 return gr.update(choices=all_models, value=all_models[0] if all_models else None)
             
             # 개별 항목이면 => 해당 유형의 로컬 모델 + "사용자 지정 모델 경로 변경"만
             if selected_type == "transformers":
-                updated_list = transformers_local + ["사용자 지정 모델 경로 변경"]
+                updated_list = transformers_local
             elif selected_type == "gguf":
-                updated_list = gguf_local + ["사용자 지정 모델 경로 변경"]
+                updated_list = gguf_local
             elif selected_type == "mlx":
-                updated_list = mlx_local + ["사용자 지정 모델 경로 변경"]
+                updated_list = mlx_local
             else:
                 # 혹시 예상치 못한 값이면 transformers로 처리(또는 None)
-                updated_list = transformers_local + ["사용자 지정 모델 경로 변경"]
+                updated_list = transformers_local
             
             updated_list = sorted(list(dict.fromkeys(updated_list)))
             return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
@@ -472,30 +492,40 @@ with gr.Blocks() as demo:
                 "English": "en"
             }
             lang_code = lang_map.get(selected_lang, "ko")
-            translation_manager.set_language(lang_code)
+            if translation_manager.set_language(lang_code):
+                
+                system_presets = load_system_presets(lang_code)
+                if len(system_presets) > 0:
+                    preset_name = list(system_presets.keys())[0]
+                    system_content = system_presets[preset_name]
+                else:
+                    system_content = _("system_message_default")
 
-            return [
-                gr.update(value=f"## {_('main_title')}"),
-                gr.update(label=_('language_select'),
-                info=_('language_info')),
-                gr.update(
-                    label=_("system_message"),
-                    value=_("system_message_default"),
-                    placeholder=_("system_message_placeholder")
-                ),
-                gr.update(label=_("model_type_label")),
-                gr.update(label=_("model_select_label")),
-                gr.update(label=_("api_key_label")),
-                gr.update(label=_("image_upload_label")),
-                gr.update(
-                    label=_("message_input_label"),
-                    placeholder=_("message_placeholder")
-                ),
-                gr.update(value=_("send_button")),
-                gr.update(label=_("seed_label"), info=_("seed_info")),
-                gr.update(value=_("reset_session_button")),
-                gr.update(value=_("reset_all_sessions_button"))
-            ]
+                return [
+                    gr.update(value=f"## {_('main_title')}"),
+                    gr.update(label=_('language_select'),
+                    info=_('language_info')),
+                    gr.update(
+                        label=_("system_message"),
+                        value=_("system_message_default"),
+                        placeholder=_("system_message_placeholder")
+                    ),
+                    gr.update(label=_("model_type_label")),
+                    gr.update(label=_("model_select_label")),
+                    gr.update(label=_("api_key_label")),
+                    gr.update(label=_("image_upload_label")),
+                    gr.update(
+                        label=_("message_input_label"),
+                        placeholder=_("message_placeholder")
+                    ),
+                    gr.update(value=_("send_button")),
+                    gr.update(label=_("seed_label"), info=_("seed_info")),
+                    gr.update(value=_("reset_session_button")),
+                    gr.update(value=_("reset_all_sessions_button")),
+                ]
+            else:
+                # 언어 변경 실패 시 아무 것도 하지 않음
+                return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         # 언어 변경 이벤트 연결
         language_dropdown.change(
@@ -513,7 +543,7 @@ with gr.Blocks() as demo:
                 send_btn,
                 seed_input,
                 reset_btn,
-                reset_all_btn
+                reset_all_btn,
             ]
         )
         # 메시지 전송 시 함수 연결
@@ -808,7 +838,7 @@ with gr.Blocks() as demo:
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     result,
-                    gr.Dropdown.update(choices=sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"] + ["사용자 지정 모델 경로 변경"]))
+                    gr.Dropdown.update(choices=sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"]))
                 )
 
             except Exception as e:
@@ -1086,7 +1116,7 @@ with gr.Blocks() as demo:
                     local_models_data["gguf"] +
                     local_models_data["mlx"]
                 )
-                new_choices = api_models + local_models + ["사용자 지정 모델 경로 변경"]
+                new_choices = api_models + local_models
                 new_choices = list(dict.fromkeys(new_choices))
                 new_choices = sorted(new_choices)
 
@@ -1229,7 +1259,7 @@ with gr.Blocks() as demo:
                 # 필요 시 추가
             ]
             local_models = new_local_models["transformers"] + new_local_models["gguf"] + new_local_models["mlx"]
-            new_choices = api_models + local_models + ["사용자 지정 모델 경로 변경"]
+            new_choices = api_models + local_models
             new_choices = list(dict.fromkeys(new_choices))
             new_choices = sorted(new_choices)  # 정렬 추가
             # 반환값:

@@ -15,9 +15,9 @@ class TranslationManager:
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
         self.character_settings: Dict[str, Dict[str, str]] = {
-            'minami_asuka': MINAMI_ASUKA_PRESET,
-            'makotono_aoi': MAKOTONO_AOI_PRESET,
-            'aino_koito': AINO_KOITO_PRESET
+            'minami_asuka': {},
+            'makotono_aoi': {},
+            'aino_koito': {}
         }
         self.load_translations()
 
@@ -452,12 +452,23 @@ class TranslationManager:
                 # Additional translation keys...
             }
         }
+        
+        default_presets = {
+            'MINAMI_ASUKA': MINAMI_ASUKA_PRESET,
+            'MAKOTONO_AOI': MAKOTONO_AOI_PRESET,
+            'AINO_KOITO': AINO_KOITO_PRESET
+        }
 
         for lang, translations in default_translations.items():
             file_path = Path('translations') / f'{lang}.json'
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(translations, f, ensure_ascii=False, indent=2)
             logger.info(f"Created default translations for {lang}")
+            
+        
+        for preset_name, languages in default_presets.items():
+            for lang_code, content in languages.items():
+                self.character_settings[preset_name.lower()][lang_code] = content
 
     def set_language(self, language_code: str) -> bool:
         """현재 언어 설정"""
@@ -517,6 +528,6 @@ def _(key: str, **kwargs) -> str:
     """UI 텍스트 번역을 위한 단축 함수"""
     return translation_manager.get(key, **kwargs)
 
-def get_character_message(character: str = 'minami') -> str:
+def get_character_message(character: str = 'minami_asuka') -> str:
     """캐릭터 설정 메시지 반환"""
     return translation_manager.get_character_setting(character)
