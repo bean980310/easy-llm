@@ -375,8 +375,9 @@ with gr.Blocks() as demo:
         )
         image_info = gr.Markdown("", visible=False)
         with gr.Column():
+            image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
             with gr.Row():
-                image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
+                
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
             with gr.Row():
                 msg = gr.Textbox(
