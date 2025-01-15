@@ -1244,6 +1244,32 @@ with gr.Blocks() as demo:
             inputs=[],
             outputs=clear_all_result
         )
+        
+        def change_language(selected_lang: str):
+            """언어 변경 처리 함수"""
+            lang_map = {
+                "한국어": "ko",
+                "日本語": "ja",
+                "中文(简体)": "zh_CN",
+                "中文(繁體)": "zh_TW",
+                "English": "en"
+            }
+            lang_code = lang_map.get(selected_lang, "ko")
+            translation_manager.set_language(lang_code)
+            
+            return [
+                gr.update(label=_("cache_refresh_button")),
+                gr.update(value=_("cache_clear_all_button"))
+            ]
+
+        language_dropdown.change(
+            fn=change_language,
+            inputs=[language_dropdown],
+            outputs=[
+                refresh_button,
+                clear_all_btn
+            ]
+        )
     with gr.Tab("유틸리티"):
         gr.Markdown("### 모델 비트 변환기")
         gr.Markdown("Transformers와 BitsAndBytes를 사용하여 모델을 8비트로 변환합니다.")

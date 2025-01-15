@@ -69,5 +69,8 @@
   "hub_download_button": "Download",
   "hub_cancel_button": "Cancel",
   "hub_details_label": "Details",
-  "hub_download_log_label": "Download Log"
+  "hub_download_log_label": "Download Log",
+  "cache_tab_title": "Cache",
+  "refresh_model_list_button": "Refresh Model List",
+  "cache_clear_all_button": "Delete all model caches"
 }

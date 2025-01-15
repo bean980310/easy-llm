@@ -69,5 +69,8 @@
   "hub_download_button": "ダウンロード",
   "hub_cancel_button": "キャンセル",
   "hub_details_label": "詳細情報",
-  "hub_download_log_label": "ダウンロードログ"
+  "hub_download_log_label": "ダウンロードログ",
+  "cache_tab_title": "キャッシュ",
+  "refresh_model_list_button": "モデルリスト更新",
+  "cache_clear_all_button": "すべてのモデルキャッシュを削除"
 }
