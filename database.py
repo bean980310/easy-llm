@@ -247,3 +247,45 @@ def load_chat_from_db(session_id):
         role, content = row
         history.append({"role": role, "content": content})
     return history
+
+def delete_session_history(session_id):
+    """
+    특정 세션 ID와 연결된 모든 채팅 기록을 데이터베이스에서 삭제합니다.
+    
+    Args:
+        session_id (str): 삭제할 세션의 ID.
+    
+    Returns:
+        bool: 삭제 성공 여부.
+    """
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chat_history WHERE session_id = ?", (session_id,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Session '{session_id}' history deleted successfully.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete session '{session_id}' history: {e}")
+        return False
+    
+# 모든 세션과 채팅 기록 삭제 함수 추가
+def delete_all_sessions():
+    """
+    데이터베이스의 모든 세션과 채팅 기록을 삭제합니다.
+    
+    Returns:
+        bool: 삭제 성공 여부.
+    """
+    try:
+        conn = sqlite3.connect("chat_history.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chat_history")
+        conn.commit()
+        conn.close()
+        logger.info("모든 세션과 채팅 기록이 성공적으로 삭제되었습니다.")
+        return True
+    except Exception as e:
+        logger.error(f"모든 세션 삭제 오류: {e}")
+        return False

@@ -15,6 +15,8 @@
   "send_button": "전송",
   "seed_label": "시드 값",
   "seed_info": "모델의 예측을 재현 가능하게 하기 위해 시드를 설정하세요.",
+  "reset_session_button": "세션 초기화",
+  "reset_all_sessions_button": "모든 세션 초기화",
   "download_tab": "다운로드",
   "download_title": "모델 다운로드",
   "download_description": "HuggingFace에서 모델을 다운로드하고 로컬에 저장합니다.",

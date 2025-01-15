@@ -30,7 +30,9 @@ from database import (
     handle_add_preset, 
     handle_delete_preset, 
     preset_exists,
-    get_preset_choices)
+    get_preset_choices,
+    delete_session_history,
+    delete_all_sessions)
 from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
@@ -173,7 +175,7 @@ def process_message(user_input, session_id, history, system_msg, selected_model,
                 )
             ),
             local_model_path=custom_path if selected_model == "사용자 지정 모델 경로 변경" else None,
-            image_input=image,
+            image_input=image,  # image 인자 전달
             api_key=api_key,
             device=device,
             seed=seed
@@ -200,13 +202,80 @@ def process_message(user_input, session_id, history, system_msg, selected_model,
     
 
 def filter_messages_for_chatbot(history):
+    """
+    채팅 히스토리를 Gradio Chatbot 컴포넌트에 맞는 형식으로 변환
+
+    Args:
+        history (list): 전체 채팅 히스토리
+
+    Returns:
+        list: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]
+    """
     messages_for_chatbot = []
     for msg in history:
         if msg["role"] in ("user", "assistant"):
             content = msg["content"] or ""
             messages_for_chatbot.append({"role": msg["role"], "content": content})
-        return messages_for_chatbot
+    return messages_for_chatbot
 
+def reset_session(history, chatbot, system_message_default):
+    """
+    특정 세션을 초기화하는 함수.
+    """
+    try:
+        # 데이터베이스에서 해당 세션 삭제
+        success = delete_session_history("demo_session")  # 현재 세션 ID 사용
+        if not success:
+            return gr.update(), history, filter_messages_for_chatbot(history), "❌ 세션 초기화에 실패했습니다."
+
+        # 히스토리 초기화 (기본 시스템 메시지로 재설정)
+        default_system = {
+            "role": "system",
+            "content": system_message_default  # 기본 시스템 메시지 내용
+        }
+        new_history = [default_system]
+
+        # 데이터베이스에 초기 히스토리 저장
+        save_chat_history_db(new_history, session_id="demo_session")  # 기본 세션 ID 사용
+
+        # 챗봇 UI 업데이트
+        chatbot_history = filter_messages_for_chatbot(new_history)
+
+        return "", new_history, chatbot_history, "✅ 세션이 초기화되었습니다."
+
+    except Exception as e:
+        logger.error(f"Error resetting session: {str(e)}", exc_info=True)
+        return "", history, filter_messages_for_chatbot(history), f"❌ 세션 초기화 중 오류가 발생했습니다: {str(e)}"
+
+def reset_all_sessions(history, chatbot, system_message_default):
+    """
+    모든 세션을 초기화하는 함수.
+    """
+    try:
+        # 데이터베이스에서 모든 세션 삭제
+        success = delete_all_sessions()
+        if not success:
+            return gr.update(), history, filter_messages_for_chatbot(history), "❌ 모든 세션 초기화에 실패했습니다."
+
+        # 히스토리 초기화 (기본 시스템 메시지로 재설정)
+        default_system = {
+            "role": "system",
+            "content": system_message_default  # 기본 시스템 메시지 내용
+        }
+        new_history = [default_system]
+
+        # 데이터베이스에 초기 히스토리 저장
+        save_chat_history_db(new_history, session_id="demo_session")  # 기본 세션 ID 사용
+
+        # 챗봇 UI 업데이트
+        chatbot_history = filter_messages_for_chatbot(new_history)
+
+        return "", new_history, chatbot_history, "✅ 모든 세션이 초기화되었습니다."
+
+    except Exception as e:
+        logger.error(f"Error resetting all sessions: {str(e)}", exc_info=True)
+        return "", history, filter_messages_for_chatbot(history), f"❌ 모든 세션 초기화 중 오류가 발생했습니다: {str(e)}"
+    
 with gr.Blocks() as demo:
     history_state = gr.State([])
     overwrite_state = gr.State(False) 
@@ -217,6 +286,9 @@ with gr.Blocks() as demo:
     selected_device_state = gr.State(default_device)
     seed_state = gr.State(42)  # 시드 상태 전역 정의
     selected_language_state = gr.State(default_language)
+    
+    reset_confirmation = gr.State(False)
+    reset_all_confirmation = gr.State(False)
     
     title=gr.Markdown(f"## {_('main_title')}")
     language_dropdown = gr.Dropdown(
@@ -283,13 +355,37 @@ with gr.Blocks() as demo:
                     interactive=True,
                     info=_("seed_info")
                 )
-        
+                        
             # 시드 입력과 상태 연결
             seed_input.change(
                 fn=lambda seed: seed if seed is not None else 42,
                 inputs=[seed_input],
                 outputs=[seed_state]
             )
+            
+            with gr.Row():
+                reset_btn = gr.Button(
+                    value=_("reset_session_button"),  # "세션 초기화"에 해당하는 번역 키
+                    variant="secondary",
+                    scale=1
+                )
+                reset_all_btn = gr.Button(
+                    value=_("reset_all_sessions_button"),  # "모든 세션 초기화"에 해당하는 번역 키
+                    variant="secondary",
+                    scale=1
+                )
+                
+            # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
+            with gr.Row(visible=False) as reset_confirm_row:
+                reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                reset_yes_btn = gr.Button("✅ 예", variant="danger")
+                reset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+
+            with gr.Row(visible=False) as reset_all_confirm_row:
+                reset_all_confirm_msg = gr.Markdown("⚠️ **정말로 모든 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                reset_all_yes_btn = gr.Button("✅ 예", variant="danger")
+                reset_all_no_btn = gr.Button("❌ 아니요", variant="secondary")
+        
         
         # 함수: OpenAI API Key와 사용자 지정 모델 경로 필드의 가시성 제어
         def toggle_api_key_visibility(selected_model):
@@ -396,7 +492,8 @@ with gr.Blocks() as demo:
                     placeholder=_("message_placeholder")
                 ),
                 gr.update(value=_("send_button")),
-                gr.update(label=_("seed_label"), info=_("seed_info"))
+                gr.update(label=_("seed_label"), info=_("seed_info")),
+                gr.update(value=_("reset_session_button"))
             ]
 
         # 언어 변경 이벤트 연결
@@ -413,7 +510,8 @@ with gr.Blocks() as demo:
                 image_input,
                 msg,
                 send_btn,
-                seed_input
+                seed_input,
+                reset_btn
             ]
         )
         # 메시지 전송 시 함수 연결
@@ -438,6 +536,11 @@ with gr.Blocks() as demo:
                 status_text     # 상태 메시지 업데이트
             ],
             queue=False
+        ).then(
+            fn=filter_messages_for_chatbot,
+            inputs=[history_state],
+            outputs=chatbot,
+            queue=False
         )
 
         send_btn.click(
@@ -461,8 +564,90 @@ with gr.Blocks() as demo:
                 status_text
             ],
             queue=False
+        ).then(
+            fn=filter_messages_for_chatbot,            # 추가된 부분
+            inputs=[history_state],
+            outputs=chatbot,                           # chatbot에 최종 전달
+            queue=False
         )
-    
+        
+        # 초기화 버튼 클릭 시 확인 메시지 표시
+        reset_btn.click(
+            fn=lambda: True,
+            inputs=[],
+            outputs=[reset_confirmation],
+            queue=False
+        ).then(
+            fn=lambda confirm: gr.update(visible=confirm),
+            inputs=[reset_confirmation],
+            outputs=[reset_confirm_row],
+            queue=False
+        )
+
+        reset_all_btn.click(
+            fn=lambda: True,
+            inputs=[],
+            outputs=[reset_all_confirmation],
+            queue=False
+        ).then(
+            fn=lambda confirm: gr.update(visible=confirm),
+            inputs=[reset_all_confirmation],
+            outputs=[reset_all_confirm_row],
+            queue=False
+        )
+
+        # "예" 버튼 클릭 시 세션 초기화 수행
+        reset_yes_btn.click(
+            fn=reset_session,  # 이미 정의된 reset_session 함수
+            inputs=[history_state, chatbot, system_message_box],
+            outputs=[
+                msg,            # 사용자 입력 필드 초기화
+                history_state,  # 히스토리 업데이트
+                chatbot,        # Chatbot UI 업데이트
+                status_text     # 상태 메시지 업데이트
+            ],
+            queue=False
+        ).then(
+            fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
+            inputs=[],
+            outputs=[reset_confirm_row],
+            queue=False
+        )
+
+        # "아니요" 버튼 클릭 시 확인 메시지 숨김
+        reset_no_btn.click(
+            fn=lambda: gr.update(visible=False),
+            inputs=[],
+            outputs=[reset_confirm_row],
+            queue=False
+        )
+
+        # "모든 세션 초기화"의 "예" 버튼 클릭 시 모든 세션 초기화 수행
+        reset_all_yes_btn.click(
+            fn=reset_all_sessions,  # 이미 정의된 reset_all_sessions 함수
+            inputs=[history_state, chatbot, system_message_box],
+            outputs=[
+                msg,            # 사용자 입력 필드 초기화
+                history_state,  # 히스토리 업데이트
+                chatbot,        # Chatbot UI 업데이트
+                status_text     # 상태 메시지 업데이트
+            ],
+            queue=False
+        ).then(
+            fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
+            inputs=[],
+            outputs=[reset_all_confirm_row],
+            queue=False
+        )
+
+        # "모든 세션 초기화"의 "아니요" 버튼 클릭 시 확인 메시지 숨김
+        reset_all_no_btn.click(
+            fn=lambda: gr.update(visible=False),
+            inputs=[],
+            outputs=[reset_all_confirm_row],
+            queue=False
+        )
+            
     with gr.Tab(_("download_tab")):
         download_title=gr.Markdown(f"""### {_("download_title")}
         {_("download_description")}
