@@ -1258,7 +1258,7 @@ with gr.Blocks() as demo:
             translation_manager.set_language(lang_code)
             
             return [
-                gr.update(label=_("cache_refresh_button")),
+                gr.update(value=_("refresh_model_list_button")),
                 gr.update(value=_("cache_clear_all_button"))
             ]
 
