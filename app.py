@@ -20,6 +20,8 @@ from utils import (
     clear_all_model_cache
 )
 from database import (
+    initialize_database,
+    ensure_demo_session,
     load_chat_from_db, 
     load_system_presets, 
     initial_load_presets, 
@@ -114,6 +116,8 @@ def initialize_app():
     - 기본 프리셋 삽입
     - 세션 초기화
     """
+    initialize_database()
+    ensure_demo_session()
     insert_default_presets(translation_manager)
     return on_app_start(default_language)
 
@@ -295,7 +299,9 @@ def reset_all_sessions(history, chatbot, system_message_default, language):
     except Exception as e:
         logger.error(f"Error resetting all sessions: {str(e)}", exc_info=True)
         return "", history, filter_messages_for_chatbot(history), f"❌ 모든 세션 초기화 중 오류가 발생했습니다: {str(e)}"
-    
+
+initialize_app()
+
 with gr.Blocks() as demo:
     history_state = gr.State([])
     overwrite_state = gr.State(False) 

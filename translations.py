@@ -9,46 +9,73 @@ import logging
 from presets import MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
 
 logger = logging.getLogger(__name__)
+
+class TranslationError(Exception):
+    """번역 관련 커스텀 예외"""
+    pass
+
 class TranslationManager:
     def __init__(self, default_language: str = 'ko'):
         self.default_language = default_language
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
         self.character_settings: Dict[str, Dict[str, str]] = {
-            'minami_asuka': {},
-            'makotono_aoi': {},
-            'aino_koito': {}
+            'minami_asuka': MINAMI_ASUKA_PRESET,
+            'makotono_aoi': MAKOTONO_AOI_PRESET,
+            'aino_koito': AINO_KOITO_PRESET
         }
         self.load_translations()
 
-    def load_translations(self):
-        """번역 파일 로드"""
-        translations_dir = Path('translations')
-        if not translations_dir.exists():
-            translations_dir.mkdir(parents=True)
-            self._create_default_translations()
-        
-        for lang_file in translations_dir.glob('*.json'):
-            lang_code = lang_file.stem
-            try:
-                with open(lang_file, 'r', encoding='utf-8') as f:
-                    self.translations[lang_code] = json.load(f)
-                logger.info(f"Loaded translations for {lang_code}")
-            except Exception as e:
-                logger.error(f"Error loading translations for {lang_code}: {e}")
+    def load_translations(self) -> None:
+        """번역 파일을 로드합니다."""
+        try:
+            translations_dir = Path('translations')
+            translations_dir.mkdir(parents=True, exist_ok=True)
+            
+            if not list(translations_dir.glob('*.json')):
+                self._create_default_translations()
+            
+            for lang_file in translations_dir.glob('*.json'):
+                lang_code = lang_file.stem
+                try:
+                    with open(lang_file, 'r', encoding='utf-8') as f:
+                        self.translations[lang_code] = json.load(f)
+                    logger.info(f"Loaded translations for {lang_code}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error in {lang_file}: {e}")
+                except Exception as e:
+                    logger.error(f"Error loading translations for {lang_code}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to load translations: {e}")
+            raise TranslationError(f"Failed to load translations: {e}")
                 
     def get_character_setting(self, character: str = 'minami_asuka') -> str:
         """현재 언어의 캐릭터 설정 가져오기"""
-        if character not in self.character_settings:
-            logger.warning(f"Character {character} not found, using default")
-            character = 'minami_asuka'
+        try:
+            if character not in self.character_settings:
+                logger.warning(f"Character {character} not found, using minami_asuka")
+                character = 'minami_asuka'
             
-        preset = self.character_settings[character]
-        return preset.get(
-            self.current_language,
-            preset[self.default_language]
-        )
-
+            preset = self.character_settings[character]
+            if self.current_language not in preset:
+                logger.warning(
+                    f"Language {self.current_language} not found for character {character}, "
+                    f"using {self.default_language}"
+                )
+                return preset[self.default_language]
+            
+            return preset[self.current_language]
+            
+        except KeyError as e:
+            error_msg = f"Character setting not found: {e}"
+            logger.error(error_msg)
+            raise TranslationError(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error getting character setting: {e}"
+            logger.error(error_msg)
+            raise TranslationError(error_msg)
+        
     def _create_default_translations(self):
         """기본 번역 파일 생성"""
         default_translations = {
@@ -487,6 +514,9 @@ class TranslationManager:
                 self.translations[self.default_language].get(key, key)
             )
             return translation.format(**kwargs) if kwargs else translation
+        except KeyError:
+            logger.warning(f"Translation key not found: {key}")
+            return key
         except Exception as e:
             logger.error(f"Translation error for key '{key}': {e}")
             return key
@@ -508,16 +538,21 @@ class TranslationManager:
 
 # 시스템 언어 감지
 def detect_system_language() -> str:
-    lang, _ = locale.getdefaultlocale()
-    if lang:
-        lang_code = lang.split('_')[0]
-        if lang_code == 'zh':
-            # 중국어의 경우 간체/번체 구분
-            if lang.lower() == 'zh_tw':
-                return 'zh_TW'
-            return 'zh_CN'
-        if lang_code in ['ko', 'ja', 'en']:
-            return lang_code
+    """시스템 기본 언어를 감지합니다."""
+    try:
+        lang, _ = locale.getdefaultlocale()
+        if lang:
+            lang_code = lang.split('_')[0]
+            if lang_code == 'zh':
+                # 중국어의 경우 간체/번체 구분
+                if lang.lower() == 'zh_tw':
+                    return 'zh_TW'
+                return 'zh_CN'
+            if lang_code in ['ko', 'ja', 'en']:
+                return lang_code
+    except Exception as e:
+        logger.error(f"Error detecting system language: {e}")
+    
     return 'ko'
 
 # 글로벌 인스턴스
