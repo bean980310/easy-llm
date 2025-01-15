@@ -377,8 +377,15 @@ with gr.Blocks() as demo:
         with gr.Column():
             image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
             with gr.Row():
-                
                 chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
+                profile_image = gr.Image(
+                    value=character_image_path,
+                    label=_('profile_image_label'),
+                    visible=True,
+                    interactive=False,
+                    width="500px",
+                    height="500px"
+                )
             with gr.Row():
                 msg = gr.Textbox(
                     label=_("message_input_label"),
