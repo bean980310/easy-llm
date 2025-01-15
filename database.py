@@ -1,31 +1,53 @@
+from typing import Optional, List, Tuple, Dict, Any
 import sqlite3
 import logging
+from contextlib import contextmanager
 import gradio as gr
 import json
 import datetime
 import csv
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# DB 초기화 시 시스템 메시지 프리셋 테이블 생성
-def initialize_presets_db():
+class DatabaseError(Exception):
+    """Custom exception for database operations"""
+    pass
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections"""
+    conn = None
     try:
-        conn = sqlite3.connect("chat_history.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS system_presets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                language TEXT NOT NULL,
-                content TEXT NOT NULL,
-                UNIQUE(name, language)
-            )
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("시스템 메시지 프리셋 테이블 초기화 완료.")
-    except Exception as e:
-        logger.error(f"시스템 메시지 프리셋 DB 초기화 오류: {e}")
+        conn = sqlite3.connect("chat_history.db", timeout=10)
+        yield conn
+    except sqlite3.Error as e:
+        logger.error(f"Database connection error: {e}")
+        raise DatabaseError(f"Failed to connect to database: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def initialize_presets_db() -> None:
+    """Initialize system message presets table"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS system_presets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    language TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    UNIQUE(name, language)
+                )
+            """)
+            conn.commit()
+            logger.info("System message presets table initialized.")
+    except DatabaseError as e:
+        logger.error(f"Failed to initialize presets DB: {e}")
+        raise
+
 
 # 앱 시작 시 DB 초기화 함수 호출
 initialize_presets_db()
@@ -168,64 +190,59 @@ def handle_delete_preset(name, language):
     else:
         return message, gr.update(choices=get_preset_choices(language))
     
-def get_existing_sessions():
-    """
-    DB에서 이미 존재하는 모든 session_id 목록을 가져옴 (중복 없이).
-    """
+def get_existing_sessions() -> List[str]:
+    """Get list of existing session IDs"""
     try:
-        conn = sqlite3.connect("chat_history.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT session_id FROM chat_history ORDER BY session_id ASC")
-        rows = cursor.fetchall()
-        conn.close()
-        session_ids = [r[0] for r in rows]
-        return session_ids
-    except Exception as e:
-        logger.error(f"세션 목록 조회 오류: {e}")
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT session_id FROM chat_history ORDER BY session_id ASC")
+            return [row[0] for row in cursor.fetchall()]
+            
+    except DatabaseError as e:
+        logger.error(f"Error retrieving sessions: {e}")
         return []
     
-def save_chat_history_db(history, session_id="session_1"):
-    """
-    채팅 히스토리를 SQLite DB에 저장합니다.
-    """
+def save_chat_history_db(history: List[Dict[str, Any]], session_id: str = "session_1") -> bool:
+    """Save chat history to SQLite database"""
     try:
-        conn = sqlite3.connect("chat_history.db", timeout=10, check_same_thread=False)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        for msg in history:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
-                SELECT COUNT(*) FROM chat_history
-                WHERE session_id = ? AND role = ? AND content = ?
-            """, (session_id, msg.get("role"), msg.get("content")))
-            count = cursor.fetchone()[0]
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-            if count == 0:
+            for msg in history:
+                # Check for duplicate messages
                 cursor.execute("""
-                    INSERT INTO chat_history (session_id, role, content)
-                    VALUES (?, ?, ?)
+                    SELECT COUNT(*) FROM chat_history
+                    WHERE session_id = ? AND role = ? AND content = ?
                 """, (session_id, msg.get("role"), msg.get("content")))
-        
-        conn.commit()
-        logger.info(f"DB에 채팅 히스토리 저장 완료 (session_id={session_id})")
-        return True
+                
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute("""
+                        INSERT INTO chat_history (session_id, role, content)
+                        VALUES (?, ?, ?)
+                    """, (session_id, msg.get("role"), msg.get("content")))
+            
+            conn.commit()
+            logger.info(f"Chat history saved successfully (session_id={session_id})")
+            return True
+            
+    except sqlite3.IntegrityError as e:
+        logger.error(f"Database integrity error: {e}")
+        return False
     except sqlite3.OperationalError as e:
-        logger.error(f"DB 작업 중 오류: {e}")
+        logger.error(f"Database operational error: {e}")
         return False
     except Exception as e:
-        logger.error(f"Error saving chat history to DB: {e}")
+        logger.error(f"Unexpected error saving chat history: {e}")
         return False
-    finally:
-        if conn:
-            conn.close()
     
 def save_chat_history(history):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

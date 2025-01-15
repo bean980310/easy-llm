@@ -4,3 +4,4 @@ app.log
 .env
 __pycache__
 chat_history.db
+translations/
