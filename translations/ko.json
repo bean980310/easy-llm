@@ -72,5 +72,7 @@
   "hub_download_log_label": "다운로드 로그",
   "cache_tab_title": "캐시",
   "refresh_model_list_button": "모델 목록 새로고침",
-  "cache_clear_all_button": "모든 모델 캐시 삭제"
+  "refresh_info_label": "새로고침 결과",
+  "cache_clear_all_button": "모든 모델 캐시 삭제",
+  "clear_all_result_label": "결과"
 }

@@ -72,5 +72,7 @@
   "hub_download_log_label": "Download Log",
   "cache_tab_title": "Cache",
   "refresh_model_list_button": "Refresh Model List",
-  "cache_clear_all_button": "Delete all model caches"
+  "refresh_info_label": "Refresh Results",
+  "cache_clear_all_button": "Delete all model caches",
+  "clear_all_result_label": "Results"
 }

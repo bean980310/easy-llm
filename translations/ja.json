@@ -72,5 +72,7 @@
   "hub_download_log_label": "ダウンロードログ",
   "cache_tab_title": "キャッシュ",
   "refresh_model_list_button": "モデルリスト更新",
-  "cache_clear_all_button": "すべてのモデルキャッシュを削除"
+  "refresh_info_label": "更新結果",
+  "cache_clear_all_button": "すべてのモデルキャッシュを削除",
+  "clear_all_result_label": "結果"
 }

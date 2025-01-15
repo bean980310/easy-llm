@@ -127,7 +127,9 @@ class TranslationManager:
                 'hub_download_log_label': '다운로드 로그',
                 "cache_tab_title": "캐시",
                 "refresh_model_list_button": "모델 목록 새로고침",
+                "refresh_info_label": "새로고침 결과",
                 "cache_clear_all_button": "모든 모델 캐시 삭제",
+                "clear_all_result_label": "결과"
                 # 추가 번역키들...
             },
             'ja': {
@@ -205,7 +207,9 @@ class TranslationManager:
                 'hub_download_log_label': 'ダウンロードログ',
                 "cache_tab_title": "キャッシュ",
                 "refresh_model_list_button": "モデルリスト更新",
+                "refresh_info_label": "更新結果",
                 "cache_clear_all_button": "すべてのモデルキャッシュを削除",
+                "clear_all_result_label": "結果"
                 # 追加の翻訳キー...
             },
             'zh_CN': {
@@ -283,7 +287,9 @@ class TranslationManager:
                 'hub_download_log_label': '下载日志',
                 "cache_tab_title": "高速缓存",
                 "refresh_model_list_button": "更新模型列表",
+                "refresh_info_label": "刷新结果",
                 "cache_clear_all_button": "删除所有模型缓存",
+                "clear_all_result_label": "结果"
                 # 其他翻译键...
             },
             'zh_TW': {
@@ -361,7 +367,9 @@ class TranslationManager:
                 'hub_download_log_label': '下載日誌',
                 "cache_tab_title": "高速緩存",
                 "refresh_model_list_button": "更新模型列表",
+                "refresh_info_label": "刷新結果",
                 "cache_clear_all_button": "刪除所有模型緩存",
+                "clear_all_result_label": "結果"
             },
             'en': {
                 'main_title': 'Simple Chatbot',
@@ -438,7 +446,9 @@ class TranslationManager:
                 'hub_download_log_label': 'Download Log',
                 "cache_tab_title": "Cache",
                 "refresh_model_list_button": "Refresh Model List",
+                "refresh_info_label": "Refresh Results",
                 "cache_clear_all_button": "Delete all model caches",
+                "clear_all_result_label": "Results"
                 # Additional translation keys...
             }
         }

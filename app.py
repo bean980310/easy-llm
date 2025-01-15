@@ -493,7 +493,8 @@ with gr.Blocks() as demo:
                 ),
                 gr.update(value=_("send_button")),
                 gr.update(label=_("seed_label"), info=_("seed_info")),
-                gr.update(value=_("reset_session_button"))
+                gr.update(value=_("reset_session_button")),
+                gr.update(value=_("reset_all_sessions_button"))
             ]
 
         # 언어 변경 이벤트 연결
@@ -511,7 +512,8 @@ with gr.Blocks() as demo:
                 msg,
                 send_btn,
                 seed_input,
-                reset_btn
+                reset_btn,
+                reset_all_btn
             ]
         )
         # 메시지 전송 시 함수 연결
@@ -1206,10 +1208,10 @@ with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column():
                 refresh_button = gr.Button(_("refresh_model_list_button"))
-                refresh_info = gr.Textbox(label="새로고침 결과", interactive=False)
+                refresh_info = gr.Textbox(label=_("refresh_info_label"), interactive=False)
             with gr.Column():
                 clear_all_btn = gr.Button(_("cache_clear_all_button"))
-                clear_all_result = gr.Textbox(label="결과", interactive=False)
+                clear_all_result = gr.Textbox(label=_("clear_all_result_label"), interactive=False)
 
         def refresh_model_list():
             """
@@ -1231,7 +1233,7 @@ with gr.Blocks() as demo:
             new_choices = list(dict.fromkeys(new_choices))
             new_choices = sorted(new_choices)  # 정렬 추가
             # 반환값:
-            logger.info("모델 목록 새로고침")
+            logger.info(_("refresh_model_list_button"))
             return gr.update(choices=new_choices), "모델 목록을 새로고침 했습니다."
             
         refresh_button.click(
@@ -1259,7 +1261,9 @@ with gr.Blocks() as demo:
             
             return [
                 gr.update(value=_("refresh_model_list_button")),
-                gr.update(value=_("cache_clear_all_button"))
+                gr.update(label=_("refresh_info_label")),
+                gr.update(value=_("cache_clear_all_button")),
+                gr.update(label=_("clear_all_result_label"))
             ]
 
         language_dropdown.change(
@@ -1267,7 +1271,9 @@ with gr.Blocks() as demo:
             inputs=[language_dropdown],
             outputs=[
                 refresh_button,
-                clear_all_btn
+                refresh_info,
+                clear_all_btn,
+                clear_all_result
             ]
         )
     with gr.Tab("유틸리티"):

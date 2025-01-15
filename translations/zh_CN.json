@@ -72,5 +72,7 @@
   "hub_download_log_label": "下载日志",
   "cache_tab_title": "高速缓存",
   "refresh_model_list_button": "更新模型列表",
-  "cache_clear_all_button": "删除所有模型缓存"
+  "refresh_info_label": "刷新结果",
+  "cache_clear_all_button": "删除所有模型缓存",
+  "clear_all_result_label": "结果"
 }
