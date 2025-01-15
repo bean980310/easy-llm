@@ -14,9 +14,12 @@ class TranslationManager:
         self.default_language = default_language
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
-        self.character_settings: Dict[str, str]={}
+        self.character_settings: Dict[str, Dict[str, str]] = {
+            'minami_asuka': MINAMI_ASUKA_PRESET,
+            'makotono_aoi': MAKOTONO_AOI_PRESET,
+            'aino_koito': AINO_KOITO_PRESET
+        }
         self.load_translations()
-        self.load_character_settings()
 
     def load_translations(self):
         """번역 파일 로드"""
@@ -34,31 +37,13 @@ class TranslationManager:
             except Exception as e:
                 logger.error(f"Error loading translations for {lang_code}: {e}")
                 
-    def load_character_settings(self):
-        """캐릭터 설정 로드"""
-        settings_path = Path('character_settings')
-        if not settings_path.exists():
-            settings_path.mkdir(parents=True)
-            self._create_default_character_settings()
-        
-        for lang_file in settings_path.glob('*.txt'):
-            lang_code = lang_file.stem
-            try:
-                with open(lang_file, 'r', encoding='utf-8') as f:
-                    self.character_settings[lang_code] = f.read()
-                logger.info(f"Loaded character settings for {lang_code}")
-            except Exception as e:
-                logger.error(f"Error loading character settings for {lang_code}: {e}")
-                
     def get_character_setting(self, character: str = 'minami_asuka') -> str:
         """현재 언어의 캐릭터 설정 가져오기"""
-        character_presets = {
-            'minami_asuka': MINAMI_ASUKA_PRESET,
-            'makotono_aoi': MAKOTONO_AOI_PRESET,
-            'aino_koito': AINO_KOITO_PRESET
-        }
-        
-        preset = character_presets.get(character, MINAMI_ASUKA_PRESET)
+        if character not in self.character_settings:
+            logger.warning(f"Character {character} not found, using default")
+            character = 'minami_asuka'
+            
+        preset = self.character_settings[character]
         return preset.get(
             self.current_language,
             preset[self.default_language]
