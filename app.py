@@ -1,5 +1,8 @@
 # app.py
 
+import importlib
+from pathlib import Path
+from typing import List, Dict, Any, Tuple
 import argparse
 import gradio as gr
 import logging
@@ -14,6 +17,8 @@ from utils import (
 )
 from database import (
     initialize_database,
+    add_system_preset,
+    delete_system_preset,
     ensure_demo_session,
     load_chat_from_db, 
     load_system_presets, 
@@ -28,6 +33,7 @@ from database import (
 from models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
+from persona_speech_manager import PersonaSpeechManager
 
 from src.main_tab import (
     api_models, 
@@ -36,10 +42,15 @@ from src.main_tab import (
     mlx_local,
     MainTab,
     generator_choices,
+    characters,
+    get_speech_manager
 )
 from src.download_tab import create_download_tab
 from src.setting_tab_preset import on_add_preset_click, apply_preset
 from src.device_setting import set_device
+
+from presets import __all__ as preset_modules
+import json
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +79,74 @@ default_language = detect_system_language()
 
 main_tab=MainTab()
 
+def load_presets_from_files(presets_dir: str) -> List[Dict[str, Any]]:
+    """
+    presets 디렉토리 내의 모든 프리셋 파일을 로드하여 프리셋 리스트를 반환합니다.
+    각 프리셋은 여러 언어로 정의될 수 있습니다.
+    """
+    presets = []
+    presets_path = Path(presets_dir)
+    for preset_file in presets_path.glob("*.py"):
+        module_name = preset_file.stem
+        try:
+            module = importlib.import_module(f"presets.{module_name}")
+            # __all__ 에 정의된 프리셋 변수들 로드
+            for preset_var in getattr(module, "__all__", []):
+                preset = getattr(module, preset_var, None)
+                if preset:
+                    # 각 언어별로 분리하여 추가
+                    for lang, content in preset.items():
+                        presets.append({
+                            "name": preset_var,
+                            "language": lang,
+                            "content": content.strip()
+                        })
+        except Exception as e:
+            logger.error(f"프리셋 파일 {preset_file} 로드 중 오류 발생: {e}")
+    return presets
+
+def update_presets_on_start(presets_dir: str):
+    """
+    앱 시작 시 presets 디렉토리의 프리셋을 로드하고 데이터베이스를 업데이트합니다.
+    """
+    # 현재 데이터베이스에 저장된 프리셋 로드
+    existing_presets = load_system_presets()  # {(name, language): content, ...}
+
+    # 파일에서 로드한 프리셋
+    loaded_presets = load_presets_from_files(presets_dir)
+
+    loaded_preset_keys = set()
+    for preset in loaded_presets:
+        name = preset["name"]
+        language = preset["language"]
+        content = preset["content"]
+        loaded_preset_keys.add((name, language))
+        existing_content = existing_presets.get((name, language))
+
+        if not existing_content:
+            # 새로운 프리셋 추가
+            success, message = add_system_preset(name, language, content)
+            if success:
+                logger.info(f"새 프리셋 추가: {name} ({language})")
+            else:
+                logger.warning(f"프리셋 추가 실패: {name} ({language}) - {message}")
+        elif existing_content != content:
+            # 기존 프리셋 내용 업데이트
+            success, message = add_system_preset(name, language, content, overwrite=True)
+            if success:
+                logger.info(f"프리셋 업데이트: {name} ({language})")
+            else:
+                logger.warning(f"프리셋 업데이트 실패: {name} ({language}) - {message}")
+
+    # 데이터베이스에 있지만 파일에는 없는 프리셋 삭제 여부 결정
+    for (name, language) in existing_presets.keys():
+        if (name, language) not in loaded_preset_keys:
+            success, message = delete_system_preset(name, language)
+            if success:
+                logger.info(f"프리셋 삭제: {name} ({language})")
+            else:
+                logger.warning(f"프리셋 삭제 실패: {name} ({language}) - {message}")
+                
 ##########################################
 # 3) Gradio UI
 ##########################################
@@ -79,7 +158,7 @@ def initialize_app():
     """
     initialize_database()
     ensure_demo_session()
-    insert_default_presets(translation_manager)
+    insert_default_presets(translation_manager, overwrite=True)
     return on_app_start(default_language)
 
 def on_app_start(language=None):  # language 매개변수에 기본값 설정
@@ -200,6 +279,14 @@ with gr.Blocks() as demo:
         label=_("system_message"),
         value=_("system_message_default"),
         placeholder=_("system_message_placeholder")
+    )
+    
+    character_dropdown = gr.Dropdown(
+        label="캐릭터 선택",
+        choices=list(characters.keys()),
+        value=list(characters.keys())[0],
+        interactive=True,
+        info="대화할 캐릭터를 선택하세요."
     )
     
     with gr.Tab(_("tab_main")):
@@ -343,7 +430,21 @@ with gr.Blocks() as demo:
         
         bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
         
-        def change_language(selected_lang):
+        def update_character_languages(selected_language, selected_character):
+            """
+            인터페이스 언어에 따라 선택된 캐릭터의 언어를 업데이트합니다.
+            """
+            speech_manager = get_speech_manager(session_id_state)
+            if selected_language in characters[selected_character]["languages"]:
+                # 인터페이스 언어가 캐릭터의 지원 언어에 포함되면 해당 언어로 설정
+                speech_manager.current_language = selected_language
+            else:
+                # 지원하지 않는 언어일 경우 기본 언어로 설정
+                speech_manager.current_language = characters[selected_character]["default_language"]
+            return gr.update()
+
+        
+        def change_language(selected_lang, selected_character):
             """언어 변경 처리 함수"""
             lang_map = {
                 "한국어": "ko",
@@ -354,8 +455,12 @@ with gr.Blocks() as demo:
             }
             lang_code = lang_map.get(selected_lang, "ko")
             if translation_manager.set_language(lang_code):
-                
+                if selected_lang in characters[selected_character]["languages"]:
+                    speech_manager.current_language = selected_lang
+                else:
+                    speech_manager.current_language = characters[selected_character]["languages"][0]
                 system_presets = load_system_presets(lang_code)
+                
                 if len(system_presets) > 0:
                     preset_name = list(system_presets.keys())[0]
                     system_content = system_presets[preset_name]
@@ -391,7 +496,7 @@ with gr.Blocks() as demo:
         # 언어 변경 이벤트 연결
         language_dropdown.change(
             fn=change_language,
-            inputs=[language_dropdown],
+            inputs=[language_dropdown, character_dropdown],
             outputs=[
                 title,
                 language_dropdown,
@@ -470,7 +575,8 @@ with gr.Blocks() as demo:
                 api_key_text, 
                 selected_device_state, 
                 seed_state,
-                selected_language_state
+                selected_language_state,
+                character_dropdown
             ],
             outputs=[
                 msg, 
@@ -1147,5 +1253,6 @@ if __name__=="__main__":
     
     initialize_app()
     translation_manager.current_language=args.language
+    speech_manager = PersonaSpeechManager(default_tone="반말")
     
     demo.queue().launch(debug=args.debug, share=args.share, inbrowser=args.inbrowser, server_port=args.port, width=800)

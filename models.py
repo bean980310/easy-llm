@@ -220,10 +220,11 @@ def load_model(selected_model, model_type, quantization_bit="Q8_0", local_model_
             models_cache[build_model_cache_key(model_id, model_type)] = handler
             return handler
 
-def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None, device="cpu", seed=42):
+def generate_answer(history, selected_model, model_type, local_model_path=None, image_input=None, api_key=None, device="cpu", seed=42, character_language='ko'):
     """
     사용자 히스토리를 기반으로 답변 생성.
     """
+        
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -243,6 +244,23 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
     
     cache_key = build_model_cache_key(selected_model, model_type, local_path=local_model_path)
     handler = models_cache.get(cache_key)
+    
+    last_message = history[-1]
+    if last_message["role"] == "assistant":
+        last_message = history[-2]
+    
+    # if character_language == "ko":
+    #     # 한국어 모델 사용
+    #     model_id = "klue/bert-base"  # 예시
+    # elif character_language == "en":
+    #     # 영어 모델 사용
+    #     model_id = "bert-base-uncased"  # 예시
+    # elif character_language == "ja":
+    #     # 일본어 모델 사용
+    #     model_id = "tohoku-nlp/bert-base-japanese"  # 예시"
+    # else:
+    #     # 기본 모델 사용
+    #     model_id = "gpt-3.5-turbo"
     
     if model_type == "api":
         if not api_key:

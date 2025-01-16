@@ -199,11 +199,12 @@ def ensure_demo_session() -> None:
         logger.error(f"Error ensuring demo session: {e}")
         raise DatabaseInitError(f"Failed to ensure demo session: {e}")
 
-def initialize_app() -> None:
+def initialize_app(translation_manager) -> None:
     """애플리케이션 시작 시 필요한 모든 초기화를 수행합니다."""
     try:
         initialize_database()
         ensure_demo_session()
+        insert_default_presets(translation_manager, overwrite=True)
         logger.info("Application initialized successfully")
     except Exception as e:
         logger.error(f"Application initialization failed: {e}")
@@ -233,14 +234,14 @@ def initialize_presets_db() -> None:
 # 앱 시작 시 DB 초기화 함수 호출
 initialize_presets_db()
 
-def insert_default_presets(translation_manager) -> None:
-    """기본 프리셋을 데이터베이스에 삽입
+# database.py
 
+def insert_default_presets(translation_manager, overwrite=True) -> None:
+    """기본 프리셋을 데이터베이스에 삽입 또는 업데이트
+    
     Args:
         translation_manager: 번역 관리자 인스턴스
-
-    Raises:
-        PresetInsertionError: 프리셋 삽입 중 오류 발생 시
+        overwrite (bool): 기존 프리셋을 덮어쓸지 여부
     """
     # 프리셋 설정 정의
     preset_configs = [
@@ -257,29 +258,32 @@ def insert_default_presets(translation_manager) -> None:
             for preset_config in preset_configs:
                 for lang in languages:
                     try:
-                        # 이미 존재하는지 확인
-                        cursor.execute(
-                            "SELECT COUNT(*) FROM system_presets WHERE name = ? AND language = ?",
-                            (preset_config.name, lang)
-                        )
+                        # translation_manager에서 프리셋 내용 가져오기
+                        content = translation_manager.get_character_setting(preset_config.character_key)
                         
-                        if cursor.fetchone()[0] == 0:
-                            # translation_manager에서 프리셋 내용 가져오기
-                            content = translation_manager.get_character_setting(preset_config.character_key)
-                            
-                            # 프리셋 삽입
-                            cursor.execute(
-                                """
-                                INSERT INTO system_presets (name, language, content)
+                        if overwrite:
+                            # 프리셋 업데이트
+                            cursor.execute("""
+                                UPDATE system_presets 
+                                SET content = ?
+                                WHERE name = ? AND language = ?
+                            """, (content, preset_config.name, lang))
+                            if cursor.rowcount == 0:
+                                # 존재하지 않으면 삽입
+                                cursor.execute("""
+                                    INSERT INTO system_presets (name, language, content)
+                                    VALUES (?, ?, ?)
+                                """, (preset_config.name, lang, content))
+                                logger.info(f"Inserted default preset: {preset_config.name} (language: {lang})")
+                            else:
+                                logger.info(f"Updated default preset: {preset_config.name} (language: {lang})")
+                        else:
+                            # 덮어쓰기 없이 삽입
+                            cursor.execute("""
+                                INSERT INTO system_presets (name, language, content) 
                                 VALUES (?, ?, ?)
-                                """,
-                                (preset_config.name, lang, content)
-                            )
-                            
-                            logger.info(
-                                f"Inserted default preset: {preset_config.name} "
-                                f"(language: {lang})"
-                            )
+                            """, (preset_config.name, lang, content))
+                            logger.info(f"Inserted default preset: {preset_config.name} (language: {lang})")
                     
                     except sqlite3.IntegrityError as e:
                         logger.warning(
@@ -298,13 +302,13 @@ def insert_default_presets(translation_manager) -> None:
                         )
             
             conn.commit()
-            logger.info("All default presets inserted successfully")
+            logger.info("All default presets inserted/updated successfully")
             
     except PresetInsertionError:
         raise
     except Exception as e:
         logger.error(f"Unexpected error during preset insertion: {e}")
-        raise PresetInsertionError(f"Failed to insert default presets: {e}")
+        raise PresetInsertionError(f"Failed to insert/update default presets: {e}")
     
 def load_system_presets(language: str) -> Dict[str, str]:
     """시스템 메시지 프리셋을 불러옵니다."""

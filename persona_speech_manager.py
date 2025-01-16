@@ -1,0 +1,235 @@
+# persona_speech_manager.py
+
+from typing import Dict
+
+
+class PersonaSpeechManager:
+    def __init__(self, characters: Dict[str, Dict[str, str]]):
+        """
+        :param characters: 캐릭터 이름을 키로 하고, 각 캐릭터의 설정을 값으로 가지는 딕셔너리
+                           예: {
+                               "친구": {"default_tone": "반말", "language": "ko"},
+                               "선생님": {"default_tone": "존댓말", "language": "ko"},
+                               "영어친구": {"default_tone": "casual", "language": "en"}
+                           }
+        """
+        self.characters = characters
+        self.current_character = None  # 현재 선택된 캐릭터
+        self.current_language = None
+    
+    def set_character(self, character_name: str, interface_language: str):
+        if character_name in self.characters:
+            self.current_character = character_name
+            # 인터페이스 언어가 캐릭터의 지원 언어에 포함되면 해당 언어로 설정
+            if interface_language in self.characters[character_name]["languages"]:
+                self.current_language = interface_language
+            else:
+                # 지원하지 않는 언어일 경우 기본 언어로 설정
+                self.current_language = self.characters[character_name]["default_tone"]
+        else:
+            raise ValueError(f"캐릭터 '{character_name}'이(가) 존재하지 않습니다.")
+    
+    def update_tone(self, user_input: str):
+        """
+        사용자 입력을 기반으로 현재 캐릭터의 말투를 업데이트
+        """
+        if "존댓말로 말해줘" in user_input:
+            self.current_tone = "존댓말"
+        elif "반말로 해도 돼" in user_input:
+            self.current_tone = "반말"
+        elif "カジュアルにして" in user_input:  # 일본어 캐주얼 전환
+            self.current_tone = "カジュアル"
+        elif "フォーマルにして" in user_input:  # 일본어 포멀 전환
+            self.current_tone = "フォーマル"
+        elif "随便说" in user_input:  # 중국어 간체 캐주얼 전환
+            self.current_tone = "随便"
+        elif "正式一点" in user_input:  # 중국어 간체 포멀 전환
+            self.current_tone = "正式"
+        elif "隨便說" in user_input:  # 중국어 번체 캐주얼 전환
+            self.current_tone = "隨便"
+        elif "正式一點" in user_input:  # 중국어 번체 포멀 전환
+            self.current_tone = "正式"
+    
+    def generate_response(self, content: str) -> str:
+        """
+        설정된 말투와 언어에 따라 응답을 생성
+        """
+        if not self.current_character:
+            raise ValueError("캐릭터가 설정되지 않았습니다.")
+
+        tone = self.current_tone if hasattr(self, 'current_tone') else self.characters[self.current_character]["default_tone"]
+        language = self.current_language
+
+        if language == "ko":
+            if tone == "반말":
+                return self.convert_to_casual(content)
+            elif tone == "존댓말":
+                return self.convert_to_formal(content)
+        elif language == "en":
+            if tone == "casual":
+                return self.convert_to_casual_english(content)
+            elif tone == "formal":
+                return self.convert_to_formal_english(content)
+        elif language == "ja":
+            if tone == "カジュアル":
+                return self.convert_to_casual_japanese(content)
+            elif tone == "フォーマル":
+                return self.convert_to_formal_japanese(content)
+        elif language == "zh_CN":
+            if tone == "随便":
+                return self.convert_to_casual_simplified_chinese(content)
+            elif tone == "正式":
+                return self.convert_to_formal_simplified_chinese(content)
+        elif language == "zh_TW":
+            if tone == "隨便":
+                return self.convert_to_casual_traditional_chinese(content)
+            elif tone == "正式":
+                return self.convert_to_formal_traditional_chinese(content)
+        # 다른 언어의 변환 로직 추가 가능
+        return content
+
+    # 한국어 변환 메서드들
+    def convert_to_casual(self, content: str) -> str:
+        """
+        한국어 존댓말을 반말로 변환
+        """
+        return content.replace("입니다", "야").replace("합니다", "해")
+
+    def convert_to_formal(self, content: str) -> str:
+        """
+        한국어 반말을 존댓말로 변환
+        """
+        return content.replace("야", "입니다").replace("해", "합니다")
+
+    # 영어 변환 메서드들
+    def convert_to_casual_english(self, content: str) -> str:
+        """
+        영어 formal을 casual로 변환 (예시)
+        """
+        replacements = {
+            "I am": "I'm",
+            "do not": "don't",
+            "cannot": "can't",
+            "would like": "wanna",
+            "could you": "could you please",
+            # 추가적인 변환 규칙
+        }
+        for formal, casual in replacements.items():
+            content = content.replace(formal, casual)
+        return content
+
+    def convert_to_formal_english(self, content: str) -> str:
+        """
+        영어 casual을 formal로 변환 (예시)
+        """
+        replacements = {
+            "I'm": "I am",
+            "don't": "do not",
+            "can't": "cannot",
+            "wanna": "would like to",
+            "could you": "could you please",
+            # 추가적인 변환 규칙
+        }
+        for casual, formal in replacements.items():
+            content = content.replace(casual, formal)
+        return content
+
+    # 일본어 변환 메서드들
+    def convert_to_casual_japanese(self, content: str) -> str:
+        """
+        일본어 포멀을 캐주얼로 변환 (예시)
+        """
+        replacements = {
+            "です": "だよ",
+            "ます": "るよ",
+            "ございます": "あげるよ",
+            "いただきます": "もらうよ",
+            # 추가적인 변환 규칙
+        }
+        for formal, casual in replacements.items():
+            content = content.replace(formal, casual)
+        return content
+
+    def convert_to_formal_japanese(self, content: str) -> str:
+        """
+        일본어 캐주얼을 포멀로 변환 (예시)
+        """
+        replacements = {
+            "だよ": "です",
+            "るよ": "ます",
+            "あげるよ": "ございます",
+            "もらうよ": "いただきます",
+            # 추가적인 변환 규칙
+        }
+        for casual, formal in replacements.items():
+            content = content.replace(casual, formal)
+        return content
+
+    # 중국어 간체 변환 메서드들
+    def convert_to_casual_simplified_chinese(self, content: str) -> str:
+        """
+        중국어 간체 正式을 随便으로 변환 (예시)
+        """
+        replacements = {
+            "您好": "嘿",
+            "请问": "请",
+            "谢谢": "谢谢你",
+            "不客气": "没事",
+            # 추가적인 변환 규칙
+        }
+        for formal, casual in replacements.items():
+            content = content.replace(formal, casual)
+        return content
+
+    def convert_to_formal_simplified_chinese(self, content: str) -> str:
+        """
+        중국어 간체 随便을 正式으로 변환 (예시)
+        """
+        replacements = {
+            "嘿": "您好",
+            "请": "请问",
+            "谢谢你": "谢谢",
+            "没事": "不客气",
+            # 추가적인 변환 규칙
+        }
+        for casual, formal in replacements.items():
+            content = content.replace(casual, formal)
+        return content
+
+    # 중국어 번체 변환 메서드들
+    def convert_to_casual_traditional_chinese(self, content: str) -> str:
+        """
+        중국어 번체 正式을 隨便으로 변환 (예시)
+        """
+        replacements = {
+            "您好": "嘿",
+            "請問": "請",
+            "謝謝": "謝謝你",
+            "不客氣": "沒事",
+            # 추가적인 변환 규칙
+        }
+        for formal, casual in replacements.items():
+            content = content.replace(formal, casual)
+        return content
+
+    def convert_to_formal_traditional_chinese(self, content: str) -> str:
+        """
+        중국어 번체 隨便을 正式으로 변환 (예시)
+        """
+        replacements = {
+            "嘿": "您好",
+            "請": "請問",
+            "謝謝你": "謝謝",
+            "沒事": "不客氣",
+            # 추가적인 변환 규칙
+        }
+        for casual, formal in replacements.items():
+            content = content.replace(casual, formal)
+        return content
+
+    def process_input(self, user_input: str, base_response: str) -> str:
+        """
+        사용자 입력 처리 후 응답 생성
+        """
+        self.update_tone(user_input)
+        return self.generate_response(base_response)

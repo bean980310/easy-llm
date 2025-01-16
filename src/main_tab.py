@@ -9,6 +9,22 @@ from translations import detect_system_language, translation_manager
 from src.preset_images import PRESET_IMAGES
 from src.api_models import api_models
 
+from persona_speech_manager import PersonaSpeechManager
+
+characters={
+    "미나미 아스카": {
+        "default_tone": "반말", 
+        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
+    },
+    "마코토노 아오이": {
+        "default_tone": "반말", 
+        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
+    },
+    "아이노 코이토": {"default_tone": "반말", 
+        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
+    },
+}
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +41,15 @@ generator_choices = sorted(generator_choices)  # 정렬
 default_language = detect_system_language()
 
 DEFAULT_PROFILE_IMAGE = None
+
+speech_manager = PersonaSpeechManager(characters=characters)
+
+session_speech_managers = {}
+
+def get_speech_manager(session_id: str) -> PersonaSpeechManager:
+    if session_id not in session_speech_managers:
+        session_speech_managers[session_id] = PersonaSpeechManager(characters=characters)
+    return session_speech_managers[session_id]
 
 class MainTab:
     def __init__(self):
@@ -69,7 +94,7 @@ class MainTab:
         else:
             return history, gr.update(value=content), None
 
-    def process_message(self, user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed, language):
+    def process_message(self, user_input, session_id, history, system_msg, selected_model, custom_path, image, api_key, device, seed, language, selected_character):
         """
         사용자 메시지를 처리하고 봇 응답을 생성하는 통합 함수.
 
@@ -100,8 +125,19 @@ class MainTab:
             }
             history = [system_message]
 
+        speech_manager = get_speech_manager(session_id)
+        
+        try:
+            speech_manager.set_character(selected_character)
+        except ValueError as e:
+            history.append({"role": "assistant", "content": f"❌ {str(e)}"})
+            return "", history, self.filter_messages_for_chatbot(history), "❌ 캐릭터 설정 오류"
+    
+        
         # 사용자 메시지 추가
         history.append({"role": "user", "content": user_input})
+        
+        speech_manager.update_tone(user_input)
 
         try:
             # 봇 응답 생성
@@ -113,11 +149,14 @@ class MainTab:
                 image_input=image,  # image 인자 전달
                 api_key=api_key,
                 device=device,
-                seed=seed
+                seed=seed,
+                character_language=language
             )
 
+            styled_answer = speech_manager.generate_response(answer)
+            
             # 응답을 히스토리에 추가
-            history.append({"role": "assistant", "content": answer})
+            history.append({"role": "assistant", "content": styled_answer})
 
             # 데이터베이스에 히스토리 저장
             save_chat_history_db(history, session_id=session_id)
