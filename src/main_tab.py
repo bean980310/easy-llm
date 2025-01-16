@@ -10,43 +10,11 @@ from translations import detect_system_language, translation_manager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 로그 포맷 정의
-formatter = logging.Formatter(
-    fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
 api_models = [
     "gpt-3.5-turbo",
     "gpt-4o-mini",
     "gpt-4o"
     # 필요 시 추가
-]
-    
-# HuggingFace에서 지원하는 기본 모델 목록
-known_hf_models = [
-    "meta-llama/Llama-3.1-8B",
-    "meta-llama/Llama-3.2-11B-Vision",
-    "meta-llama/Llama-3.2-11B-Vision-Instruct",
-    "Bllossom/llama-3.2-Korean-Bllossom-3B",
-    "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-    "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
-    "THUDM/glm-4-9b-chat",
-    "THUDM/glm-4-9b-chat-hf",
-    "THUDM/glm-4-9b-chat-1m",
-    "THUDM/glm-4-9b-chat-1m-hf",
-    "THUDM/glm-4v-9b",
-    "huggyllama/llama-7b",
-    "OrionStarAI/Orion-14B-Base",
-    "OrionStarAI/Orion-14B-Chat",
-    "OrionStarAI/Orion-14B-LongChat",
-    "CohereForAI/aya-23-8B",
-    "CohereForAI/aya-23-35B",
-    "Qwen/Qwen2.5-7B",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "EleutherAI/polyglot-ko-1.3b"
 ]
 
 local_models_data = get_all_local_models()
