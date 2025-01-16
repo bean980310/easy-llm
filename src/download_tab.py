@@ -5,7 +5,10 @@ import traceback
 import gradio as gr
 from huggingface_hub import HfApi
 
-from src.main_tab import MainTab, api_models
+from src.main_tab import MainTab
+from src.api_models import api_models
+from src.known_hf_models import known_hf_models
+
 from utils import download_model_from_hf, make_local_dir_name, get_all_local_models
 
 # 로깅 설정
@@ -13,32 +16,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 main_tab=MainTab()
-
-known_hf_models = [
-    "meta-llama/Llama-3.1-8B",
-    "meta-llama/Llama-3.2-11B-Vision",
-    "meta-llama/Llama-3.2-11B-Vision-Instruct",
-    "Bllossom/llama-3.2-Korean-Bllossom-3B",
-    "Bllossom/llama-3.2-Korean-Bllossom-AICA-5B",
-    "Bllossom/llama-3.1-Korean-Bllossom-Vision-8B",
-    "THUDM/glm-4-9b-chat",
-    "THUDM/glm-4-9b-chat-hf",
-    "THUDM/glm-4-9b-chat-1m",
-    "THUDM/glm-4-9b-chat-1m-hf",
-    "THUDM/glm-4v-9b",
-    "huggyllama/llama-7b",
-    "OrionStarAI/Orion-14B-Base",
-    "OrionStarAI/Orion-14B-Chat",
-    "OrionStarAI/Orion-14B-LongChat",
-    "CohereForAI/aya-23-8B",
-    "CohereForAI/aya-23-35B",
-    "Qwen/Qwen2.5-7B",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "EleutherAI/polyglot-ko-1.3b"
-]
-
 
 def create_download_tab():
     with gr.Tab("Download"):

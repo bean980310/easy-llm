@@ -39,9 +39,10 @@ from src.main_tab import (
     mlx_local,
     MainTab,
     generator_choices,
-    PRESET_IMAGES
 )
 from src.download_tab import create_download_tab
+from src.setting_tab_preset import on_add_preset_click, apply_preset
+from src.device_setting import set_device
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -721,18 +722,6 @@ with gr.Blocks() as demo:
                 outputs=[preset_dropdown],
                 queue=False
             )
-        
-            # 프리셋 추가 버튼 클릭 시
-            def on_add_preset_click(name, content):
-                if preset_exists(name.strip()):
-                    # 프리셋이 이미 존재하면 덮어쓰기 확인을 요청
-                    return "", gr.update(visible=True), gr.update(visible=True), "⚠️ 해당 프리셋이 이미 존재합니다. 덮어쓰시겠습니까?"
-                else:
-                    success, message = handle_add_preset(name.strip(), content.strip())
-                    if success:
-                        return message, gr.update(visible=False), gr.update(visible=False), ""
-                    else:
-                        return message, gr.update(visible=False), gr.update(visible=False), ""
             
             add_preset_btn.click(
                 fn=on_add_preset_click,
@@ -779,29 +768,6 @@ with gr.Blocks() as demo:
                 inputs=[preset_dropdown],
                 outputs=[preset_info, preset_dropdown]
             )
-        
-            # 프리셋 적용 이벤트 수정
-            def apply_preset(name, session_id, history, language=None):
-                if not name:
-                    return "❌ 적용할 프리셋을 선택해주세요.", history, gr.update()
-                
-                if language is None:
-                    language = "ko"
-                    
-                presets = load_system_presets(language)
-                content = presets.get(name, "")
-                if not content:
-                    return "❌ 선택한 프리셋에 내용이 없습니다.", history, gr.update()
-        
-                # 현재 세션의 히스토리를 초기화하고 시스템 메시지 추가
-                new_history = [{"role": "system", "content": content}]
-                success = save_chat_history_db(new_history, session_id=session_id)
-                if not success:
-                    return "❌ 프리셋 적용 중 오류가 발생했습니다.", history, gr.update()
-                logger.info(f"'{name}' 프리셋을 적용하여 세션을 초기화했습니다.")
-                
-                image_path = PRESET_IMAGES.get(name)
-                return f"✅ '{name}' 프리셋이 적용되었습니다.", new_history, gr.update(value=content), gr.update(value=image_path) if image_path else gr.update()
         
             apply_preset_btn.click(
                 fn=apply_preset,
@@ -1078,30 +1044,6 @@ with gr.Blocks() as demo:
                 value=f"현재 기본 장치: {default_device.upper()}",
                 interactive=False
             )
-            def set_device(selection):
-                """
-                Sets the device based on user selection.
-                - Auto: Automatically detect the best device.
-                - CPU: Force CPU usage.
-                - GPU: Detect and use CUDA or MPS based on available hardware.
-                """
-                if selection == "Auto (Recommended)":
-                    device = get_default_device()
-                elif selection == "CPU":
-                    device = "cpu"
-                elif selection == "GPU":
-                    if torch.cuda.is_available():
-                        device = "cuda"
-                    elif platform.system() == "Darwin" and torch.backends.mps.is_available():
-                        device = "mps"
-                    else:
-                        return gr.update(value="❌ GPU가 감지되지 않았습니다. CPU로 전환됩니다."), "cpu"
-                else:
-                    device = "cpu"
-                
-                device_info_message = f"선택된 장치: {device.upper()}"
-                logger.info(device_info_message)
-                return gr.update(value=device_info_message), device
             
             device_dropdown.change(
                 fn=set_device,

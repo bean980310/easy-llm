@@ -6,16 +6,12 @@ from models import get_all_local_models, generate_answer
 from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets
 from translations import detect_system_language, translation_manager
 
+from src.preset_images import PRESET_IMAGES
+from src.api_models import api_models
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-api_models = [
-    "gpt-3.5-turbo",
-    "gpt-4o-mini",
-    "gpt-4o"
-    # 필요 시 추가
-]
 
 local_models_data = get_all_local_models()
 transformers_local = local_models_data["transformers"]
@@ -27,12 +23,6 @@ generator_choices = list(dict.fromkeys(generator_choices))  # 중복 제거
 generator_choices = sorted(generator_choices)  # 정렬
 
 default_language = detect_system_language()
-
-PRESET_IMAGES = {
-    "MINAMI_ASUKA_PRESET": os.path.join("assets", "1_minami_asuka.png"),
-    "MAKOTONO_AOI_PRESET": os.path.join("assets", "2_makotono_aoi.png"),
-    "AINO_KOITO_PRESET": os.path.join("assets", "3_aino_koito.png"),
-}
 
 DEFAULT_PROFILE_IMAGE = None
 
