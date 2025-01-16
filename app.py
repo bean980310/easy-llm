@@ -84,6 +84,15 @@ main_tab=MainTab()
 
 speech_manager=PersonaSpeechManager(translation_manager, characters)
 
+def handle_character_change(selected_character, language):
+    try:
+        speech_manager.set_character_and_language(selected_character, language)
+        system_message = speech_manager.get_system_message()
+        return system_message, gr.update(value=speech_manager.characters[selected_character]["profile_image"])
+    except ValueError as e:
+        logger.error(str(e))
+        return "❌ 선택한 캐릭터가 유효하지 않습니다.", gr.update(value=None)
+    
 def load_presets_from_files(presets_dir: str) -> List[Dict[str, Any]]:
     """
     presets 디렉토리 내의 모든 프리셋 파일을 로드하여 프리셋 리스트를 반환합니다.

@@ -202,12 +202,26 @@ class MainTab:
     
 
     def filter_messages_for_chatbot(self, history):
+        """
+        채팅 히스토리를 Gradio Chatbot 컴포넌트에 맞는 형식으로 변환
+
+        Args:
+            history (list): 전체 채팅 히스토리
+
+        Returns:
+            list: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]
+        """
         messages_for_chatbot = []
         for msg in history:
             if msg["role"] in ("user", "assistant"):
                 content = msg["content"] or ""
-                messages_for_chatbot.append({"role": msg["role"], "content": content})
-        return messages_for_chatbot  # 루프 밖에서 반환됨
+                character = msg.get("character", "")
+                if character:
+                    display_content = f"**{character}:** {content}"
+                else:
+                    display_content = content
+                messages_for_chatbot.append({"role": msg["role"], "content": display_content})
+        return messages_for_chatbot
 
     def reset_session(self, history, chatbot, system_message_default, language=None):
         """
