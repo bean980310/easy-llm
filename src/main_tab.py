@@ -215,7 +215,7 @@ class MainTab:
         for msg in history:
             if msg["role"] in ("user", "assistant"):
                 content = msg["content"] or ""
-                character = msg.get("character", "")
+                character = msg.get("assistant", "")  # 오타 수정
                 if character:
                     display_content = f"**{character}:** {content}"
                 else:

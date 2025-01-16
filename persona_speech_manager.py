@@ -3,6 +3,8 @@ import logging
 from typing import Dict
 from database import load_system_presets
 
+import re
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class PersonaSpeechManager:
@@ -20,6 +22,7 @@ class PersonaSpeechManager:
         self.current_character = None  # 현재 선택된 캐릭터
         self.current_language = None
         self.current_system_preset = None
+        self.current_tone = None
     
     def set_character_and_language(self, character_name: str, language: str):
         if character_name in self.characters:
@@ -29,6 +32,8 @@ class PersonaSpeechManager:
             else:
                 self.current_language = self.characters[character_name]["default_language"]
                 logger.warning(f"Language '{language}' not supported by '{character_name}'. Using default language '{self.current_language}'.")
+            
+            self.current_tone = self.characters[character_name].get("default_tone", "존댓말")
             
             # 시스템 메시지 프리셋 불러오기
             presets = load_system_presets(self.current_language)
@@ -128,15 +133,25 @@ class PersonaSpeechManager:
     # 한국어 변환 메서드들
     def convert_to_casual(self, content: str) -> str:
         """
-        한국어 존댓말을 반말로 변환
+        한국어 존댓말을 반말로 변환 (정규 표현식 사용)
         """
-        return content.replace("입니다", "야").replace("합니다", "해")
+        # 예시: "입니다"를 "야"로 변환
+        content = re.sub(r'\b입니다\b', '야', content)
+        content = re.sub(r'\b예요\b', '야', content)
+        content = re.sub(r'\b합니다\b', '해', content)
+        content = re.sub(r'\b요\b', '', content)
+        return content.strip()
+
 
     def convert_to_formal(self, content: str) -> str:
         """
-        한국어 반말을 존댓말로 변환
+        한국어 반말을 존댓말로 변환 (정규 표현식 사용)
         """
-        return content.replace("야", "입니다").replace("해", "합니다")
+        # 예시: "야"를 "입니다"로 변환
+        content = re.sub(r'\b야\b', '입니다', content)
+        content = re.sub(r'\b해\b', '합니다', content)
+        content = re.sub(r'$', '요', content)  # 문장 끝에 "요" 추가
+        return content.strip()
 
     # 영어 변환 메서드들
     def convert_to_casual_english(self, content: str) -> str:
