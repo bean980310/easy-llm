@@ -148,7 +148,7 @@ class MainTab:
             return "transformers"
     
 
-    def filter_messages_for_chatbot(history):
+    def filter_messages_for_chatbot(self, history):
         """
         채팅 히스토리를 Gradio Chatbot 컴포넌트에 맞는 형식으로 변환
 
