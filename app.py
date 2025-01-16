@@ -1,8 +1,6 @@
 # app.py
 
 import argparse
-import platform
-import torch
 import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
@@ -25,10 +23,9 @@ from database import (
     save_chat_history_db, 
     handle_add_preset, 
     handle_delete_preset, 
-    preset_exists,
     get_preset_choices,
     insert_default_presets)
-from models import default_device, get_all_local_models, get_default_device, generate_stable_diffusion_prompt_cached
+from models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
 
@@ -176,7 +173,6 @@ def parse_args():
 args=parse_args()
 
 with gr.Blocks() as demo:
-    
     session_id, loaded_history, session_dropdown, session_label=on_app_start()
     history_state = gr.State(loaded_history)
     overwrite_state = gr.State(False) 
