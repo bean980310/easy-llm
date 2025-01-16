@@ -3,20 +3,14 @@
 import argparse
 import platform
 import torch
-import os
-import traceback
-import torch
 import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
 import json
 import secrets
-from huggingface_hub import HfApi
 import sqlite3
 from utils import (
-    make_local_dir_name,
     get_all_local_models,  # 수정된 함수
-    download_model_from_hf,
     convert_and_save,
     clear_all_model_cache
 )
@@ -33,10 +27,8 @@ from database import (
     handle_delete_preset, 
     preset_exists,
     get_preset_choices,
-    delete_session_history,
-    delete_all_sessions,
     insert_default_presets)
-from models import default_device, get_all_local_models, get_default_device, generate_answer, generate_stable_diffusion_prompt_cached
+from models import default_device, get_all_local_models, get_default_device, generate_stable_diffusion_prompt_cached
 from cache import models_cache
 from translations import translation_manager, _, detect_system_language
 
