@@ -2,9 +2,9 @@ import logging
 import gradio as gr
 import os
 
-from ..models import get_all_local_models, generate_answer
-from ..database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets
-from ..translations import detect_system_language, translation_manager
+from models import get_all_local_models, generate_answer
+from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets
+from translations import detect_system_language, translation_manager
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
