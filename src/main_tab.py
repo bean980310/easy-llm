@@ -48,7 +48,7 @@ known_hf_models = [
     "Qwen/Qwen2.5-14B-Instruct",
     "EleutherAI/polyglot-ko-1.3b"
 ]
-    
+
 local_models_data = get_all_local_models()
 transformers_local = local_models_data["transformers"]
 gguf_local = local_models_data["gguf"]
