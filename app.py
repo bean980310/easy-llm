@@ -1,5 +1,6 @@
 # app.py
 
+import argparse
 import platform
 import torch
 import os
@@ -130,8 +131,55 @@ def on_app_start(language=None):  # language 매개변수에 기본값 설정
         gr.update(choices=sessions, value=sid if sessions else None),
         f"현재 세션: {sid}"
     )
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Easy-LLM Application Setting")
     
-initialize_app()
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=7861,
+        help="Gradio 서버가 실행될 포트 번호를 지정합니다. (default: %(default)d)"
+    )
+    
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="모델의 예측을 재현 가능하게 하기 위한 시드 값을 지정합니다. (default: %(default)d)"
+    )
+    
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="디버깅 모드를 활성화합니다. (default: %(default)s)"
+    )
+    
+    parser.add_argument(
+        "--inbrowser",
+        type=bool,
+        default=True,
+        help="Gradio 앱을 브라우저에서 실행합니다. (default: %(default)s)"
+    )
+    
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="gradio 앱의 공유 링크를 생성합니다."
+    )
+    
+    parser.add_argument(
+        "--language",
+        type=str,
+        default=default_language,
+        choices=["ko", "ja", "en", "zh_CN", "zh_TW"],
+        help="애플리케이션의 기본 언어를 지정합니다. (default: %(default)s)"
+    )
+    
+    return parser.parse_args()
+
+
+args=parse_args()
 
 with gr.Blocks() as demo:
     
@@ -143,7 +191,7 @@ with gr.Blocks() as demo:
     custom_model_path_state = gr.State("")
     session_id_state = gr.State()
     selected_device_state = gr.State(default_device)
-    seed_state = gr.State(42)  # 시드 상태 전역 정의
+    seed_state = gr.State(args.seed)  # 시드 상태 전역 정의
     selected_language_state = gr.State(default_language)
     
     reset_confirmation = gr.State(False)
@@ -1575,5 +1623,10 @@ with gr.Blocks() as demo:
         current_session_display],
         queue=False
     )
+
+if __name__=="__main__":
     
-demo.launch(debug=True, inbrowser=True, server_port=7861, width=800)
+    initialize_app()
+    translation_manager.current_language=args.language
+    
+    demo.queue().launch(debug=args.debug, share=args.share, inbrowser=args.inbrowser, server_port=args.port, width=800)
