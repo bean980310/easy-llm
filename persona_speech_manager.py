@@ -44,6 +44,8 @@ class PersonaSpeechManager:
             else:
                 self.current_system_preset = "당신은 유용한 AI 비서입니다."
                 logger.warning(f"Preset '{preset_name}' not found for language {self.current_language}. Using default.")
+            initial_response = f"{self.current_character} 캐릭터로 설정되었습니다. {self.current_tone} 말투가 적용되었습니다."
+            return self.generate_response(initial_response)
         else:
             raise ValueError(f"캐릭터 '{character_name}'이(가) 존재하지 않습니다.")
     
