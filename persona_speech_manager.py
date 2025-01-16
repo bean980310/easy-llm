@@ -43,7 +43,25 @@ class PersonaSpeechManager:
             raise ValueError(f"캐릭터 '{character_name}'이(가) 존재하지 않습니다.")
     
     def get_system_message(self) -> str:
-        return self.current_system_preset or "당신은 유용한 AI 비서입니다."
+        """현재 캐릭터의 시스템 메시지 프리셋을 반환합니다."""
+        if not self.current_character:
+            return "당신은 유용한 AI 비서입니다."
+            
+        try:
+            # 현재 언어로 프리셋 불러오기
+            presets = load_system_presets(self.current_language)
+            preset_name = self.characters[self.current_character]["preset_name"]
+            
+            if preset_name in presets:
+                logger.info(f"Loaded system message for {self.current_character} in {self.current_language}")
+                return presets[preset_name]
+            else:
+                logger.warning(f"Preset {preset_name} not found for language {self.current_language}")
+                return "당신은 유용한 AI 비서입니다."
+                
+        except Exception as e:
+            logger.error(f"Error loading system message: {e}")
+            return "당신은 유용한 AI 비서입니다."
 
     def get_available_presets(self, language: str) -> Dict[str, str]:
         return load_system_presets(language)

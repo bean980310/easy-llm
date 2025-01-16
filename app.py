@@ -308,12 +308,6 @@ with gr.Blocks() as demo:
         info="대화할 캐릭터를 선택하세요."
     )
     
-    character_dropdown.change(
-        fn=update_system_message_and_profile,
-        inputs=[character_dropdown, language_dropdown],
-        outputs=[system_message_box]
-    )
-    
     with gr.Tab(_("tab_main")):
         initial_choices = api_models + transformers_local + gguf_local + mlx_local
         initial_choices = list(dict.fromkeys(initial_choices))
@@ -399,12 +393,12 @@ with gr.Blocks() as demo:
                 outputs=[seed_state]
             )
             
-            # # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
-            # change_preset_button.click(
-            #     fn=main_tab.handle_change_preset,
-            #     inputs=[preset_dropdown, history_state, selected_language_state],
-            #     outputs=[history_state, system_message_box, profile_image]
-            # )
+            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
+            change_preset_button.click(
+                fn=main_tab.handle_change_preset,
+                inputs=[preset_dropdown, history_state, selected_language_state],
+                outputs=[history_state, system_message_box, profile_image]
+            )
             
             character_dropdown.change(
                 fn=update_system_message_and_profile,
@@ -549,7 +543,8 @@ with gr.Blocks() as demo:
                 api_key_text,
                 selected_device_state,
                 seed_state,
-                selected_language_state
+                selected_language_state,
+                character_dropdown
             ],
             outputs=[
                 msg,            # 사용자 입력 필드 초기화
@@ -563,26 +558,6 @@ with gr.Blocks() as demo:
             inputs=[history_state],
             outputs=chatbot,
             queue=False
-        )
-        
-        start_conversation_button.click(
-            fn=main_tab.process_character_conversation,
-            inputs=[
-                history_state,
-                character_conversation_dropdown,
-                model_type_dropdown, 
-                model_dropdown,
-                custom_model_path_state,
-                image_input,
-                api_key_text,
-                selected_device_state,
-                seed_state
-            ],
-            outputs=[history_state, profile_image]
-        ).then(
-            fn=main_tab.filter_messages_for_chatbot,  # 히스토리를 채팅창에 표시하기 위한 필터링
-            inputs=[history_state],
-            outputs=[chatbot]
         )
 
         send_btn.click(
@@ -613,6 +588,26 @@ with gr.Blocks() as demo:
             inputs=[history_state],
             outputs=chatbot,                           # chatbot에 최종 전달
             queue=False
+        )
+        
+        start_conversation_button.click(
+            fn=main_tab.process_character_conversation,
+            inputs=[
+                history_state,
+                character_conversation_dropdown,
+                model_type_dropdown, 
+                model_dropdown,
+                custom_model_path_state,
+                image_input,
+                api_key_text,
+                selected_device_state,
+                seed_state
+            ],
+            outputs=[history_state, profile_image]
+        ).then(
+            fn=main_tab.filter_messages_for_chatbot,  # 히스토리를 채팅창에 표시하기 위한 필터링
+            inputs=[history_state],
+            outputs=[chatbot]
         )
         
         # 초기화 버튼 클릭 시 확인 메시지 표시

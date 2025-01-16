@@ -9,6 +9,7 @@ from translations import detect_system_language, TranslationManager, translation
 from src.preset_images import PRESET_IMAGES
 from src.api_models import api_models
 
+import traceback
 from persona_speech_manager import PersonaSpeechManager
 
 # 로깅 설정
@@ -62,6 +63,7 @@ class MainTab:
         self.default_language=default_language
         self.preset_images=PRESET_IMAGES
         self.default_profile_image=DEFAULT_PROFILE_IMAGE
+        self.characters=characters
         
     def handle_change_preset(self, new_preset_name, history, language):
         """
@@ -123,6 +125,10 @@ class MainTab:
             # 빈 입력일 경우 아무 것도 하지 않음
             return "", history, self.filter_messages_for_chatbot(history), ""
 
+        if selected_character and selected_character not in self.characters:
+            logger.warning(f"Invalid character selected: {selected_character}")
+            selected_character = None
+            
         if not history:
             # 히스토리가 없을 경우 시스템 메시지로 초기화
             system_message = {
@@ -136,7 +142,9 @@ class MainTab:
         try:
             speech_manager.set_character_and_language(selected_character, language)
         except ValueError as e:
-            history.append({"role": "assistant", "content": f"❌ {str(e)}"})
+            tb = traceback.format_exc()
+            logger.error(f"캐릭터 설정 오류: {str(e)}\n{tb}")
+            history.append({"role": "assistant", "content": f"❌ 캐릭터 설정 중 오류가 발생했습니다."})
             return "", history, self.filter_messages_for_chatbot(history), "❌ 캐릭터 설정 오류"
     
         
@@ -178,7 +186,7 @@ class MainTab:
         # 업데이트된 히스토리를 Chatbot 형식으로 변환
         chatbot_history = self.filter_messages_for_chatbot(history)
 
-        return "", history, chatbot_history
+        return "", history, chatbot_history, status
     
     def determine_model_type(self, selected_model):
         if selected_model in api_models:
@@ -194,26 +202,12 @@ class MainTab:
     
 
     def filter_messages_for_chatbot(self, history):
-        """
-        채팅 히스토리를 Gradio Chatbot 컴포넌트에 맞는 형식으로 변환
-
-        Args:
-            history (list): 전체 채팅 히스토리
-
-        Returns:
-            list: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]
-        """
         messages_for_chatbot = []
         for msg in history:
             if msg["role"] in ("user", "assistant"):
                 content = msg["content"] or ""
-                character = msg.get("assistent", "")
-                if character:
-                    display_content = f"**{character}:** {content}"
-                else:
-                    display_content = content
-                messages_for_chatbot.append({"role": msg["role"], "content": display_content})
-        return messages_for_chatbot
+                messages_for_chatbot.append({"role": msg["role"], "content": content})
+        return messages_for_chatbot  # 루프 밖에서 반환됨
 
     def reset_session(self, history, chatbot, system_message_default, language=None):
         """
@@ -381,9 +375,10 @@ def update_system_message_and_profile(character_name, language_display_name):
     try:
         language_code = translation_manager.get_language_code(language_display_name)
         speech_manager.set_character_and_language(character_name, language_code)
+        # presets = load_system_presets(language=language_code)
         system_message = speech_manager.get_system_message()
-        
         selected_profile_image = characters[character_name]["profile_image"]
+        
         return system_message, selected_profile_image
     except ValueError as ve:
         logger.error(f"Character setting error: {ve}")

@@ -322,8 +322,9 @@ def load_system_presets(language: str) -> Dict[str, str]:
                 ORDER BY name ASC
             """, (language,))
             results = cursor.fetchall()
-            # 딕셔너리로 변환하여 반환
-            return {name: content for name, content in results} if results else {}
+            presets = {name: content for name, content in results} if results else {}
+            logger.debug(f"Loaded presets for language {language}: {list(presets.keys())}")
+            return presets
             
     except sqlite3.Error as e:
         logger.error(f"Error loading presets for language {language}: {e}")
