@@ -512,559 +512,421 @@ with gr.Blocks() as demo:
             queue=False
         )
             
-    with gr.Tab(_("download_tab")):
-        download_title=gr.Markdown(f"""### {_("download_title")}
-        {_("download_description")}
-        {_("download_description_detail")}""")
-        
-        with gr.Column():
-            # 다운로드 모드 선택 (라디오 버튼)
-            download_mode = gr.Radio(
-                label=_("download_mode_label"),
-                choices=["Predefined", "Custom Repo ID"],
-                value="Predefined",
-                container=True,
-            )
-            # 모델 선택/입력 영역
-            with gr.Column(visible=True) as predefined_column:
+    with gr.Tab("Download"):
+        with gr.Tabs():
+            # Predefined 탭
+            with gr.Tab("Predefined"):
+                gr.Markdown("""### Predefined Models
+                Select from a list of predefined models available for download.""")
+
                 predefined_dropdown = gr.Dropdown(
-                    label=_("model_select_label"),
+                    label="Model Selection",
                     choices=sorted(known_hf_models),
                     value=known_hf_models[0] if known_hf_models else None,
-                    info=_("model_select_info")
+                    info="Select a predefined model from the list."
                 )
-                
-            with gr.Column(visible=False) as custom_column:
-                custom_repo_id_box = gr.Textbox(
-                    label="Custom Model ID",
-                    placeholder=_("custom_model_id_placeholder"),
-                    info=_("custom_model_id_info")
-                )
-                
-            # 다운로드 설정
-            with gr.Row():
-                with gr.Column(scale=2):
+
+                # 다운로드 설정
+                with gr.Row():
                     target_path = gr.Textbox(
-                        label=_("save_path_label"),
+                        label="Save Path",
                         placeholder="./models/my-model",
                         value="",
                         interactive=True,
-                        info=_("save_path_info")
+                        info="Leave empty to use the default path."
                     )
-                with gr.Column(scale=1):
                     use_auth = gr.Checkbox(
-                        label=_("auth_required_label"),
+                        label="Authentication Required",
                         value=False,
-                        info=_("auth_required_info")
+                        info="Check if the model requires authentication."
                     )
-            
-            with gr.Column(visible=False) as auth_column:
-                hf_token = gr.Textbox(
-                    label="HuggingFace Token",
-                    placeholder="hf_...",
-                    type="password",
-                    info=_("hf_token_info")
-                )
-            
-            # 다운로드 버튼과 진행 상태
-            with gr.Row():
-                download_btn = gr.Button(
-                    value=_("download_start_button"),
-                    variant="primary",
-                    scale=2
-                )
-                cancel_btn = gr.Button(
-                    value=_("download_cancel_button"),
-                    variant="stop",
-                    scale=1,
-                    interactive=False
-                )
-                
-            # 상태 표시
-            download_status = gr.Markdown("")
-            progress_bar = gr.Progress(
-                track_tqdm=True,  # tqdm progress bars를 추적
-            )
-            
-            # 다운로드 결과와 로그
-            with gr.Accordion(_("download_details_label"), open=False):
-                download_info = gr.TextArea(
-                    label=_("download_log_label"),
-                    interactive=False,
-                    max_lines=10,
-                    autoscroll=True
-                )
 
-        # UI 동작 제어를 위한 함수들
-        def toggle_download_mode(mode):
-            """다운로드 모드에 따라 UI 컴포넌트 표시/숨김"""
-            return [
-                gr.update(visible=(mode == "Predefined")),  # predefined_column
-                gr.update(visible=(mode == "Custom Repo ID"))  # custom_column
-            ]
-            
-        download_mode.change(
-            fn=toggle_download_mode,
-            inputs=[download_mode],
-            outputs=[predefined_column, custom_column]
-        )
-
-        def toggle_auth(use_auth_val):
-            """인증 필요 여부에 따라 토큰 입력창 표시/숨김"""
-            return gr.update(visible=use_auth_val)
-        
-        use_auth.change(
-            fn=toggle_auth,
-            inputs=[use_auth],
-            outputs=[auth_column]
-        )
-
-        def download_with_progress(mode, predefined_choice, custom_repo, target_dir, use_auth_val, token):
-            try:
-                repo_id = predefined_choice if mode == "Predefined" else custom_repo.strip()
-                if not repo_id:
-                    yield (
-                        _("download_error_no_model"),  # status
-                        gr.update(interactive=True),  # download_btn
-                        gr.update(interactive=False),  # cancel_btn
-                        "다운로드가 시작되지 않았습니다.",  # download_info
-                        gr.Dropdown.update()
+                with gr.Column(visible=False) as auth_column_predefined:
+                    hf_token = gr.Textbox(
+                        label="HuggingFace Token",
+                        placeholder="hf_...",
+                        type="password",
+                        info="Enter your HuggingFace token if authentication is required."
                     )
-                    return  
 
-                # 모델 유형 결정
-                if "gguf" in repo_id.lower():
-                    model_type = "gguf"
-                elif "mlx" in repo_id.lower():
-                    model_type = "mlx"
-                else:
-                    model_type = "transformers"
-
-                # 진행 상태 초기화
-                yield (
-                    _("download_preparing"),
-                    gr.update(interactive=False),
-                    gr.update(interactive=True),
-                    f"모델: {repo_id}\n준비 중...",
-                    gr.Dropdown.update()
-                )
-
-                # 실제 다운로드 수행
-                yield (
-                    _("download_in_progress"),
-                    gr.update(interactive=False),
-                    gr.update(interactive=True),
-                    "다운로드를 진행 중입니다...",
-                    gr.Dropdown.update()
-                )
-                result = download_model_from_hf(
-                    repo_id,
-                    target_dir or os.path.join("./models", model_type, make_local_dir_name(repo_id)),
-                    model_type=model_type,
-                    token=token if use_auth_val else None
-                )
-
-                # 다운로드 완료 후 UI 업데이트
-                yield (
-                    _("download_complete") if "실패" not in result else _("download_failed"),
-                    gr.update(interactive=True),
-                    gr.update(interactive=False),
-                    result,
-                    gr.Dropdown.update(choices=sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"]))
-                )
-
-            except Exception as e:
-                yield (
-                    _("download_error"),
-                    gr.update(interactive=True),
-                    gr.update(interactive=False),
-                    f"오류: {str(e)}\n\n{traceback.format_exc()}",
-                    gr.Dropdown.update()
-                )
-
-        # Gradio에서 async 함수를 지원하는지 확인 후, 연결
-        download_btn.click(
-            fn=download_with_progress,
-            inputs=[
-                download_mode,
-                predefined_dropdown,
-                custom_repo_id_box,
-                target_path,
-                use_auth,
-                hf_token
-            ],
-            outputs=[
-                download_status,
-                download_btn,
-                cancel_btn,
-                download_info,
-                model_dropdown
-            ]
-        )
-        
-        def change_language(selected_lang: str):
-            """언어 변경 처리 함수"""
-            lang_map = {
-                "한국어": "ko",
-                "日本語": "ja",
-                "中文(简体)": "zh_CN",
-                "中文(繁體)": "zh_TW",
-                "English": "en"
-            }
-            lang_code = lang_map.get(selected_lang, "ko")
-            translation_manager.set_language(lang_code)
-            
-            return [
-                gr.update(value=f"""### {_("download_title")}
-                {_("download_description")}
-                {_("download_description_detail")}"""),
-                gr.update(label=_("download_mode_label")),
-                gr.update(label=_("model_select_label"), info=_('model_select_info')),
-                gr.update(
-                    placeholder=_("custom_model_id_placeholder"),
-                    info=_("custom_model_id_info")
-                ),
-                gr.update(
-                    label=_("save_path_label"),
-                    info=_("save_path_info")
-                ),
-                gr.update(
-                    label=_("auth_required_label"),
-                    info=_("auth_required_info")
-                ),
-                gr.update(
-                    label=_("hf_token_label"),
-                    info=_("hf_token_info")
-                ),
-                gr.update(value=_("download_start_button")),
-                gr.update(value=_("download_cancel_button")),
-                gr.update(label=_("download_log_label"))
-            ]
-        language_dropdown.change(
-            fn=change_language,
-            inputs=[language_dropdown],
-            outputs=[
-                download_title,
-                download_mode,
-                predefined_dropdown,
-                custom_repo_id_box,
-                target_path,
-                use_auth,
-                hf_token,
-                download_btn,
-                cancel_btn,
-                download_info
-        ]
-    )
-    with gr.Tab(_("hub_tab_title")):
-        hub_title=gr.Markdown(f"""### {_("hub_description")}
-        {_("hub_description_detail")}
-        {_("hub_search_description")}""")
-        
-        with gr.Row():
-            search_box = gr.Textbox(
-                label=_("hub_search_label"),
-                placeholder=_("hub_search_placeholder"),
-                scale=4
-            )
-            search_btn = gr.Button(_("hub_search_button"), scale=1)
-            
-        with gr.Row():
-            with gr.Column(scale=1):
-                model_type_filter = gr.Dropdown(
-                    label=_("hub_model_type_label"),
-                    choices=["All", "Text Generation", "Vision", "Audio", "Other"],
-                    value="All"
-                )
-                language_filter = gr.Dropdown(
-                    label=_("hub_language_label"),
-                    choices=["All", "Korean", "English", "Chinese", "Japanese", "Multilingual"],
-                    value="All"
-                )
-                library_filter = gr.Dropdown(
-                    label=_("hub_library_label"),
-                    choices=["All", "Transformers", "GGUF", "MLX"],
-                    value="All"
-                )
-            with gr.Column(scale=3):
-                model_list = gr.Dataframe(
-                    headers=["Model ID", "Description", "Downloads", "Likes"],
-                    label=_("hub_model_list_label"),
-                    interactive=False
-                )
-        
-        with gr.Row():
-            selected_model = gr.Textbox(
-                label=_("hub_selected_model_label"),
-                interactive=False
-            )
-            
-        # 다운로드 설정
-        with gr.Row():
-            with gr.Column(scale=2):
-                target_path = gr.Textbox(
-                    label=_("hub_save_path_label"),
-                    placeholder=_("hub_save_path_placeholder"),
-                    value="",
-                    interactive=True,
-                    info=_("hub_save_path_info")
-                )
-            with gr.Column(scale=1):
-                use_auth = gr.Checkbox(
-                    label=_("hub_auth_required_label"),
-                    value=False,
-                    info=_("hub_auth_required_info")
-                )
-        
-        with gr.Column(visible=False) as auth_column:
-            hf_token = gr.Textbox(
-                label=_("hub_token_label"),
-                placeholder=_("hub_token_placeholder"),
-                type="password",
-                info=_("hub_token_info")
-            )
-        
-        # 다운로드 버튼과 진행 상태
-        with gr.Row():
-            download_btn = gr.Button(
-                _("hub_download_button"),
-                variant="primary",
-                scale=2
-            )
-            cancel_btn = gr.Button(
-                _("hub_cancel_button"),
-                variant="stop",
-                scale=1,
-                interactive=False
-            )
-            
-        # 상태 표시
-        download_status = gr.Markdown("")
-        progress_bar = gr.Progress(track_tqdm=True)
-        
-        # 다운로드 결과와 로그
-        with gr.Accordion(_("hub_details_label"), open=False):
-            download_info = gr.TextArea(
-                label=_("hub_download_log_label"),
-                interactive=False,
-                max_lines=10,
-                autoscroll=True
-            )
-
-        def search_models(query, model_type, language, library):
-            """허깅페이스 허브에서 모델 검색"""
-            try:
-                api = HfApi()
-                # 검색 필터 구성
-                filter_str = ""
-                if model_type != "All":
-                    filter_str += f"task_{model_type.lower().replace(' ', '_')}"
-                if language != "All":
-                    if filter_str:
-                        filter_str += " AND "
-                    filter_str += f"language_{language.lower()}"
-                if library != "All":
-                    filter_str += f"library_{library.lower()}"
-
-                # 모델 검색 수행
-                models = api.list_models(
-                    filter=filter_str if filter_str else None,
-                    limit=100,
-                    sort="lastModified",
-                    direction=-1
-                )
-
-                filtered_models = [model for model in models if query.lower() in model.id.lower()]
-
-                # 결과 데이터프레임 구성
-                model_list_data = []
-                for model in filtered_models:
-                    description = model.cardData.get('description', '') if model.cardData else 'No description available.'
-                    short_description = (description[:100] + "...") if len(description) > 100 else description
-                    model_list_data.append([
-                        model.id,
-                        short_description,
-                        model.downloads,
-                        model.likes
-                    ])
-                return model_list_data
-            except Exception as e:
-                logger.error(f"모델 검색 중 오류 발생: {str(e)}\n\n{traceback.format_exc()}")
-                return [["오류 발생", str(e), "", ""]]
-
-        def select_model(evt: gr.SelectData, data):
-            """데이터프레임에서 모델 선택"""
-            selected_model_id = data.at[evt.index[0], "Model ID"]  # 선택된 행의 'Model ID' 컬럼 값
-            return selected_model_id
-        
-        def toggle_auth(use_auth_val):
-            """인증 필요 여부에 따라 토큰 입력창 표시/숨김"""
-            return gr.update(visible=use_auth_val)
-        
-        def download_model_with_progress(model_id, target_dir, use_auth_val, token, progress=gr.Progress()):
-            """진행률 표시와 함께 모델 다운로드 수행"""
-            try:
-                if not model_id:
-                    yield (
-                        _('download_error_no_model'),
-                        gr.update(interactive=True),
-                        gr.update(interactive=False),
-                        "다운로드가 시작되지 않았습니다.",
-                        gr.Dropdown.update()
+                # 다운로드 버튼과 진행 상태
+                with gr.Row():
+                    download_btn_predefined = gr.Button(
+                        value="Start Download",
+                        variant="primary",
+                        scale=2
                     )
-                    return
-                
-                # 모델 유형 결정
-                model_type = "transformers"  # 기본값
-                if "gguf" in model_id.lower():
-                    model_type = "gguf"
-                elif "mlx" in model_id.lower():
-                    model_type = "mlx"
+                    cancel_btn_predefined = gr.Button(
+                        value="Cancel",
+                        variant="stop",
+                        scale=1,
+                        interactive=False
+                    )
 
-                # 진행 상태 초기화
-                progress(0, desc="준비 중...")
-                yield (
-                    _('download_preparing'),
-                    gr.update(interactive=False),
-                    gr.update(interactive=True),
-                    f"모델: {model_id}\n준비 중...",
-                    gr.Dropdown.update()
+                # 상태 표시
+                download_status_predefined = gr.Markdown("")
+                progress_bar_predefined = gr.Progress(track_tqdm=True)
+
+                # 다운로드 결과와 로그
+                with gr.Accordion("Download Details", open=False):
+                    download_info_predefined = gr.TextArea(
+                        label="Download Log",
+                        interactive=False,
+                        max_lines=10,
+                        autoscroll=True
+                    )
+
+                # 이벤트 핸들러
+                def toggle_auth_predefined(use_auth_val):
+                    return gr.update(visible=use_auth_val)
+
+                use_auth.change(
+                    fn=toggle_auth_predefined,
+                    inputs=[use_auth],
+                    outputs=[auth_column_predefined]
                 )
 
-                # 실제 다운로드 수행
-                progress(0.5, desc=_('download_in_progress'))
-                result = download_model_from_hf(
-                    model_id,
-                    target_dir or os.path.join("./models", model_type, make_local_dir_name(model_id)),
-                    model_type=model_type,
-                    token=token if use_auth_val else None
+                def download_predefined_model(predefined_choice, target_dir, use_auth_val, token):
+                    try:
+                        repo_id = predefined_choice
+                        if not repo_id:
+                            download_status_predefined.update("❌ No model selected.")
+                            return
+
+                        model_type = main_tab.determine_model_type(repo_id)
+
+                        download_status_predefined.update("🔄 Preparing to download...")
+                        logger.info(f"Starting download for {repo_id}")
+
+                        # 실제 다운로드 함수 호출 (비동기 처리를 원한다면 async 함수로 구현 필요)
+                        result = download_model_from_hf(
+                            repo_id,
+                            target_dir or os.path.join("./models", model_type, make_local_dir_name(repo_id)),
+                            model_type=model_type,
+                            token=token if use_auth_val else None
+                        )
+
+                        download_status_predefined.update("✅ Download completed!" if "실패" not in result else "❌ Download failed.")
+                        download_info_predefined.update(result)
+
+                        # 다운로드 완료 후 모델 목록 업데이트
+                        new_choices = sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"])
+                        return gr.Dropdown.update(choices=new_choices)
+
+                    except Exception as e:
+                        logger.error(f"Error downloading model: {str(e)}")
+                        download_status_predefined.update("❌ An error occurred during download.")
+                        download_info_predefined.update(f"Error: {str(e)}\n{traceback.format_exc()}")
+
+                download_btn_predefined.click(
+                    fn=download_predefined_model,
+                    inputs=[predefined_dropdown, target_path, use_auth, hf_token],
+                    outputs=[download_status_predefined, download_info_predefined]
                 )
 
-                # 다운로드 완료 후 UI 업데이트
-                progress(1.0, desc="완료")
-                local_models_data = get_all_local_models()
-                local_models = (
-                    local_models_data["transformers"] +
-                    local_models_data["gguf"] +
-                    local_models_data["mlx"]
-                )
-                new_choices = api_models + local_models
-                new_choices = list(dict.fromkeys(new_choices))
-                new_choices = sorted(new_choices)
+            # Custom Repo ID 탭
+            with gr.Tab("Custom Repo ID"):
+                gr.Markdown("""### Custom Repository ID
+                Enter a custom HuggingFace repository ID to download the model.""")
 
-                yield (
-                    _('download_complete') if "실패" not in result else _('download_failed'),
-                    gr.update(interactive=True),
-                    gr.update(interactive=False),
-                    result,
-                    gr.Dropdown.update(choices=new_choices)
+                custom_repo_id_box = gr.Textbox(
+                    label="Custom Model ID",
+                    placeholder="e.g., facebook/opt-350m",
+                    info="Enter the HuggingFace model repository ID (e.g., organization/model-name)."
                 )
 
-            except Exception as e:
-                yield (
-                    _('download_error'),
-                    gr.update(interactive=True),
-                    gr.update(interactive=False),
-                    f"오류: {str(e)}\n\n{traceback.format_exc()}",
-                    gr.Dropdown.update()
+                # 다운로드 설정
+                with gr.Row():
+                    target_path_custom = gr.Textbox(
+                        label="Save Path",
+                        placeholder="./models/custom-model",
+                        value="",
+                        interactive=True,
+                        info="Leave empty to use the default path."
+                    )
+                    use_auth_custom = gr.Checkbox(
+                        label="Authentication Required",
+                        value=False,
+                        info="Check if the model requires authentication."
+                    )
+
+                with gr.Column(visible=False) as auth_column_custom:
+                    hf_token_custom = gr.Textbox(
+                        label="HuggingFace Token",
+                        placeholder="hf_...",
+                        type="password",
+                        info="Enter your HuggingFace token if authentication is required."
+                    )
+
+                # 다운로드 버튼과 진행 상태
+                with gr.Row():
+                    download_btn_custom = gr.Button(
+                        value="Start Download",
+                        variant="primary",
+                        scale=2
+                    )
+                    cancel_btn_custom = gr.Button(
+                        value="Cancel",
+                        variant="stop",
+                        scale=1,
+                        interactive=False
+                    )
+
+                # 상태 표시
+                download_status_custom = gr.Markdown("")
+                progress_bar_custom = gr.Progress(track_tqdm=True)
+
+                # 다운로드 결과와 로그
+                with gr.Accordion("Download Details", open=False):
+                    download_info_custom = gr.TextArea(
+                        label="Download Log",
+                        interactive=False,
+                        max_lines=10,
+                        autoscroll=True
+                    )
+
+                # 이벤트 핸들러
+                def toggle_auth_custom(use_auth_val):
+                    return gr.update(visible=use_auth_val)
+
+                use_auth_custom.change(
+                    fn=toggle_auth_custom,
+                    inputs=[use_auth_custom],
+                    outputs=[auth_column_custom]
                 )
 
-        # 이벤트 연결
-        search_btn.click(
-            fn=search_models,
-            inputs=[search_box, model_type_filter, language_filter, library_filter],
-            outputs=model_list
-        )
-        
-        model_list.select(
-            fn=select_model,
-            inputs=[model_list],
-            outputs=selected_model
-        )
-        
-        use_auth.change(
-            fn=toggle_auth,
-            inputs=use_auth,
-            outputs=auth_column
-        )
-        
-        download_btn.click(
-            fn=download_model_with_progress,
-            inputs=[
-                selected_model,
-                target_path,
-                use_auth,
-                hf_token
-            ],
-            outputs=[
-                download_status,
-                download_btn,
-                cancel_btn,
-                download_info,
-                model_dropdown
-            ]
-        )
-        
-        def change_language(selected_lang: str):
-            """언어 변경 처리 함수"""
-            lang_map = {
-                "한국어": "ko",
-                "日本語": "ja",
-                "中文(简体)": "zh_CN",
-                "中文(繁體)": "zh_TW",
-                "English": "en"
-            }
-            lang_code = lang_map.get(selected_lang, "ko")
-            translation_manager.set_language(lang_code)
-            
-            return [
-                gr.update(value=f"""### {_("hub_description")}
-                    {_("hub_description_detail")}
-                    {_("hub_search_description")}"""),
-                gr.update(label=_("hub_search_label"),
-                        placeholder=_("hub_search_placeholder")),
-                gr.update(value=_("hub_search_button")),
-                gr.update(label=_("hub_model_type_label"),
-                        choices=["All", "Text Generation", "Vision", "Audio", "Other"]),
-                gr.update(label=_("hub_language_label"),
-                        choices=["All", "Korean", "English", "Chinese", "Japanese", "Multilingual"]),
-                gr.update(label=_("hub_library_label"),
-                        choices=["All", "Transformers", "GGUF", "MLX"]),
-                gr.update(label=_("hub_model_list_label")),
-                gr.update(label=_("hub_selected_model_label")),
-                gr.update(label=_("hub_save_path_label"),
-                        placeholder=_("hub_save_path_placeholder"),
-                        info=_("hub_save_path_info")),
-                gr.update(label=_("hub_auth_required_label"),
-                        info=_("hub_auth_required_info")),
-                gr.update(label=_("hub_token_label"),
-                        placeholder=_("hub_token_placeholder"),
-                        info=_("hub_token_info")),
-                gr.update(value=_("hub_download_button")),
-                gr.update(value=_("hub_cancel_button")),
-                gr.update(label=_("hub_download_log_label"))
-            ]
-            
-        language_dropdown.change(
-            fn=change_language,
-            inputs=[language_dropdown],
-            outputs=[
-                hub_title,
-                search_box,
-                search_btn,
-                model_type_filter,
-                language_filter,
-                library_filter,
-                model_list,
-                selected_model,
-                target_path,
-                use_auth,
-                hf_token,
-                download_btn,
-                cancel_btn,
-                download_info
-            ]
-        )
+                def download_custom_model(custom_repo, target_dir, use_auth_val, token):
+                    try:
+                        repo_id = custom_repo.strip()
+                        if not repo_id:
+                            download_status_custom.update("❌ No repository ID entered.")
+                            return
+
+                        model_type = main_tab.determine_model_type(repo_id)
+
+                        download_status_custom.update("🔄 Preparing to download...")
+                        logger.info(f"Starting download for {repo_id}")
+
+                        # 실제 다운로드 함수 호출 (비동기 처리를 원한다면 async 함수로 구현 필요)
+                        result = download_model_from_hf(
+                            repo_id,
+                            target_dir or os.path.join("./models", model_type, make_local_dir_name(repo_id)),
+                            model_type=model_type,
+                            token=token if use_auth_val else None
+                        )
+
+                        download_status_custom.update("✅ Download completed!" if "실패" not in result else "❌ Download failed.")
+                        download_info_custom.update(result)
+
+                        # 다운로드 완료 후 모델 목록 업데이트
+                        new_choices = sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"])
+                        return gr.Dropdown.update(choices=new_choices)
+
+                    except Exception as e:
+                        logger.error(f"Error downloading model: {str(e)}")
+                        download_status_custom.update("❌ An error occurred during download.")
+                        download_info_custom.update(f"Error: {str(e)}\n{traceback.format_exc()}")
+
+                download_btn_custom.click(
+                    fn=download_custom_model,
+                    inputs=[custom_repo_id_box, target_path_custom, use_auth_custom, hf_token_custom],
+                    outputs=[download_status_custom, download_info_custom]
+                )
+
+            # Hub 탭
+            with gr.Tab("Hub"):
+                gr.Markdown("""### Hub Models
+                Search and download models directly from HuggingFace Hub.""")
+
+                with gr.Row():
+                    search_box_hub = gr.Textbox(
+                        label="Search",
+                        placeholder="Enter model name, tag, or keyword...",
+                        scale=4
+                    )
+                    search_btn_hub = gr.Button("Search", scale=1)
+
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        model_type_filter_hub = gr.Dropdown(
+                            label="Model Type",
+                            choices=["All", "Text Generation", "Vision", "Audio", "Other"],
+                            value="All"
+                        )
+                        language_filter_hub = gr.Dropdown(
+                            label="Language",
+                            choices=["All", "Korean", "English", "Chinese", "Japanese", "Multilingual"],
+                            value="All"
+                        )
+                        library_filter_hub = gr.Dropdown(
+                            label="Library",
+                            choices=["All", "Transformers", "GGUF", "MLX"],
+                            value="All"
+                        )
+                    with gr.Column(scale=3):
+                        model_list_hub = gr.Dataframe(
+                            headers=["Model ID", "Description", "Downloads", "Likes"],
+                            label="Search Results",
+                            interactive=False
+                        )
+
+                with gr.Row():
+                    selected_model_hub = gr.Textbox(
+                        label="Selected Model",
+                        interactive=False
+                    )
+
+                # 다운로드 설정
+                with gr.Row():
+                    target_path_hub = gr.Textbox(
+                        label="Save Path",
+                        placeholder="./models/hub-model",
+                        value="",
+                        interactive=True,
+                        info="Leave empty to use the default path."
+                    )
+                    use_auth_hub = gr.Checkbox(
+                        label="Authentication Required",
+                        value=False,
+                        info="Check if the model requires authentication."
+                    )
+
+                with gr.Column(visible=False) as auth_column_hub:
+                    hf_token_hub = gr.Textbox(
+                        label="HuggingFace Token",
+                        placeholder="hf_...",
+                        type="password",
+                        info="Enter your HuggingFace token if authentication is required."
+                    )
+
+                # 다운로드 버튼과 진행 상태
+                with gr.Row():
+                    download_btn_hub = gr.Button(
+                        value="Start Download",
+                        variant="primary",
+                        scale=2
+                    )
+                    cancel_btn_hub = gr.Button(
+                        value="Cancel",
+                        variant="stop",
+                        scale=1,
+                        interactive=False
+                    )
+
+                # 상태 표시
+                download_status_hub = gr.Markdown("")
+                progress_bar_hub = gr.Progress(track_tqdm=True)
+
+                # 다운로드 결과와 로그
+                with gr.Accordion("Download Details", open=False):
+                    download_info_hub = gr.TextArea(
+                        label="Download Log",
+                        interactive=False,
+                        max_lines=10,
+                        autoscroll=True
+                    )
+
+                # 이벤트 핸들러
+                def toggle_auth_hub(use_auth_val):
+                    return gr.update(visible=use_auth_val)
+
+                use_auth_hub.change(
+                    fn=toggle_auth_hub,
+                    inputs=[use_auth_hub],
+                    outputs=[auth_column_hub]
+                )
+
+                def search_models_hub(query, model_type, language, library):
+                    """Search models on HuggingFace Hub"""
+                    try:
+                        api = HfApi()
+                        filter_str = ""
+                        if model_type != "All":
+                            filter_str += f"task_{model_type.lower().replace(' ', '_')}"
+                        if language != "All":
+                            if filter_str:
+                                filter_str += " AND "
+                            filter_str += f"language_{language.lower()}"
+                        if library != "All":
+                            filter_str += f"library_{library.lower()}"
+
+                        models = api.list_models(
+                            filter=filter_str if filter_str else None,
+                            limit=100,
+                            sort="lastModified",
+                            direction=-1
+                        )
+
+                        filtered_models = [model for model in models if query.lower() in model.id.lower()]
+
+                        model_list_data = []
+                        for model in filtered_models:
+                            description = model.cardData.get('description', '') if model.cardData else 'No description available.'
+                            short_description = (description[:100] + "...") if len(description) > 100 else description
+                            model_list_data.append([
+                                model.id,
+                                short_description,
+                                model.downloads,
+                                model.likes
+                            ])
+                        return model_list_data
+                    except Exception as e:
+                        logger.error(f"Error searching models: {str(e)}\n{traceback.format_exc()}")
+                        return [["Error occurred", str(e), "", ""]]
+
+                def select_model_hub(evt: gr.SelectData, data):
+                    """Select model from dataframe"""
+                    selected_model_id = data.at[evt.index[0], "Model ID"] if evt.index else ""
+                    return selected_model_id
+
+                def download_hub_model(model_id, target_dir, use_auth_val, token):
+                    try:
+                        if not model_id:
+                            download_status_hub.update("❌ No model selected.")
+                            return
+
+                        model_type = main_tab.determine_model_type(model_id)
+
+                        download_status_hub.update("🔄 Preparing to download...")
+                        logger.info(f"Starting download for {model_id}")
+
+                        # 실제 다운로드 함수 호출 (비동기 처리를 원한다면 async 함수로 구현 필요)
+                        result = download_model_from_hf(
+                            model_id,
+                            target_dir or os.path.join("./models", model_type, make_local_dir_name(model_id)),
+                            model_type=model_type,
+                            token=token if use_auth_val else None
+                        )
+
+                        download_status_hub.update("✅ Download completed!" if "실패" not in result else "❌ Download failed.")
+                        download_info_hub.update(result)
+
+                        # 다운로드 완료 후 모델 목록 업데이트
+                        new_choices = sorted(api_models + get_all_local_models()["transformers"] + get_all_local_models()["gguf"] + get_all_local_models()["mlx"])
+                        return gr.Dropdown.update(choices=new_choices)
+
+                    except Exception as e:
+                        logger.error(f"Error downloading model: {str(e)}")
+                        download_status_hub.update("❌ An error occurred during download.")
+                        download_info_hub.update(f"Error: {str(e)}\n{traceback.format_exc()}")
+
+                search_btn_hub.click(
+                    fn=search_models_hub,
+                    inputs=[search_box_hub, model_type_filter_hub, language_filter_hub, library_filter_hub],
+                    outputs=model_list_hub
+                )
+
+                model_list_hub.select(
+                    fn=select_model_hub,
+                    inputs=[model_list_hub],
+                    outputs=[selected_model_hub]
+                )
+
+                download_btn_hub.click(
+                    fn=download_hub_model,
+                    inputs=[selected_model_hub, target_path_hub, use_auth_hub, hf_token_hub],
+                    outputs=[download_status_hub, download_info_hub]
+                )
         
     with gr.Tab(_("cache_tab_title")):
         with gr.Row():
