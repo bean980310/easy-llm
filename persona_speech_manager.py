@@ -136,10 +136,24 @@ class PersonaSpeechManager:
         한국어 존댓말을 반말로 변환 (정규 표현식 사용)
         """
         # 예시: "입니다"를 "야"로 변환
+        content = re.sub(r'예\b', '응', content)
+        content = re.sub(r'네\b', '응', content)
+        content = re.sub(r'감사합니다\b', '고마워', content)
+        content = re.sub(r'죄송합니다\b','미안해', content)
         content = re.sub(r'\b입니다\b', '야', content)
-        content = re.sub(r'\b예요\b', '야', content)
+        content = re.sub(r'\b습니다\b', '어', content)
         content = re.sub(r'\b합니다\b', '해', content)
-        content = re.sub(r'\b요\b', '', content)
+        content = re.sub(r'\b입니까\b', '일까', content)
+        content = re.sub(r'\b인가요\b', '일까', content)
+        content = re.sub(r'\b할겁니까\b', '할까', content)
+        content = re.sub(r'\b할까요\b', '할까', content)
+        content = re.sub(r'\b예요\b', '야', content)
+        content = re.sub(r'\b어요\b', '어', content)
+        content = re.sub(r'\b해요\b', '해', content)
+        content = re.sub(r'\b봐요\b', '봐', content)
+        content = re.sub(r'\b주세요\b', '줘', content)
+        content = re.sub(r'\b줘요\b', '줘', content)
+        content = re.sub(r'\b죠\b', '지', content)
         return content.strip()
 
 
@@ -147,10 +161,20 @@ class PersonaSpeechManager:
         """
         한국어 반말을 존댓말로 변환 (정규 표현식 사용)
         """
-        # 예시: "야"를 "입니다"로 변환
-        content = re.sub(r'\b야\b', '입니다', content)
+        # 예시: "야"를 "예요"로 변환
+        content = re.sub(r'\b야\b', '예요', content)
+        content = re.sub(r'\b응\b', '예요', content)
         content = re.sub(r'\b해\b', '합니다', content)
-        content = re.sub(r'$', '요', content)  # 문장 끝에 "요" 추가
+        content = re.sub(r'\b어\b', '습니다', content)
+        content = re.sub(r'\b지\b', '죠', content)
+        # 추가적인 변환 규칙을 아래에 추가할 수 있습니다.
+        # 예를 들어:
+        content = re.sub(r'\b할까\b', '할까요', content)
+        content = re.sub(r'\b일까\b', '입니까', content)
+        content = re.sub(r'\b왔어\b', '왔어요', content)
+        content = re.sub(r'\b봐\b', '봐요', content)
+        content = re.sub(r'\b줘\b', '주세요', content)
+        content = re.sub(r'\b싶어\b', '싶어요', content)
         return content.strip()
 
     # 영어 변환 메서드들
