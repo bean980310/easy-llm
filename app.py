@@ -32,7 +32,7 @@ from database import (
     insert_default_presets)
 from models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
 from cache import models_cache
-from translations import translation_manager, _, detect_system_language
+from translations import translation_manager, _, detect_system_language, TranslationManager
 from persona_speech_manager import PersonaSpeechManager
 
 from src.main_tab import (
@@ -43,7 +43,8 @@ from src.main_tab import (
     MainTab,
     generator_choices,
     characters,
-    get_speech_manager
+    get_speech_manager,
+    update_system_message_and_profile
 )
 from src.download_tab import create_download_tab
 from src.setting_tab_preset import on_add_preset_click, apply_preset
@@ -77,7 +78,11 @@ logger.addHandler(rotating_file_handler)
 
 default_language = detect_system_language()
 
+# translation_manager = TranslationManager(default_language)
+
 main_tab=MainTab()
+
+speech_manager=PersonaSpeechManager(translation_manager, characters)
 
 def load_presets_from_files(presets_dir: str) -> List[Dict[str, Any]]:
     """
@@ -202,6 +207,20 @@ def on_app_start(language=None):  # language 매개변수에 기본값 설정
         f"현재 세션: {sid}"
     )
 
+def on_character_and_language_select(character_name, language):
+    """
+    캐릭터와 언어 선택 시 호출되는 함수.
+    - 캐릭터와 언어 설정 적용
+    - 시스템 메시지 프리셋 업데이트
+    """
+    try:
+        speech_manager.set_character_and_language(character_name, language)
+        system_message = speech_manager.get_system_message()
+        return system_message
+    except ValueError as ve:
+        logger.error(f"Character setting error: {ve}")
+        return "시스템 메시지 로딩 중 오류가 발생했습니다."
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Easy-LLM Application Setting")
     
@@ -289,6 +308,12 @@ with gr.Blocks() as demo:
         info="대화할 캐릭터를 선택하세요."
     )
     
+    character_dropdown.change(
+        fn=update_system_message_and_profile,
+        inputs=[character_dropdown, language_dropdown],
+        outputs=[system_message_box]
+    )
+    
     with gr.Tab(_("tab_main")):
         initial_choices = api_models + transformers_local + gguf_local + mlx_local
         initial_choices = list(dict.fromkeys(initial_choices))
@@ -332,7 +357,7 @@ with gr.Blocks() as demo:
                     show_label=True,
                     width=400,
                     height=400,
-                    value=None
+                    value=characters[list(characters.keys())[0]]["profile_image"]
                 )
                 
             with gr.Row():
@@ -359,7 +384,7 @@ with gr.Blocks() as demo:
                 )
                 
             with gr.Row():
-                character_dropdown = gr.CheckboxGroup(
+                character_conversation_dropdown = gr.CheckboxGroup(
                     label="대화할 캐릭터 선택",
                     choices=get_preset_choices(default_language),  # 추가 캐릭터 이름
                     value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
@@ -374,11 +399,17 @@ with gr.Blocks() as demo:
                 outputs=[seed_state]
             )
             
-            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
-            change_preset_button.click(
-                fn=main_tab.handle_change_preset,
-                inputs=[preset_dropdown, history_state, selected_language_state],
-                outputs=[history_state, system_message_box, profile_image]
+            # # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
+            # change_preset_button.click(
+            #     fn=main_tab.handle_change_preset,
+            #     inputs=[preset_dropdown, history_state, selected_language_state],
+            #     outputs=[history_state, system_message_box, profile_image]
+            # )
+            
+            character_dropdown.change(
+                fn=update_system_message_and_profile,
+                inputs=[character_dropdown, language_dropdown],
+                outputs=[system_message_box, profile_image]
             )
             
             with gr.Row():
@@ -418,14 +449,6 @@ with gr.Blocks() as demo:
             fn=main_tab.update_model_list,
             inputs=[model_type_dropdown],
             outputs=[model_dropdown]
-        )
-        
-        # .load()를 사용해, 페이지 로딩시 자동으로 on_app_start()가 실행되도록 연결
-        demo.load(
-            fn=on_app_start,
-            inputs=[],
-            outputs=[session_id_state, history_state],
-            queue=False
         )
         
         bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
@@ -546,7 +569,7 @@ with gr.Blocks() as demo:
             fn=main_tab.process_character_conversation,
             inputs=[
                 history_state,
-                character_dropdown,
+                character_conversation_dropdown,
                 model_type_dropdown, 
                 model_dropdown,
                 custom_model_path_state,
@@ -1253,6 +1276,6 @@ if __name__=="__main__":
     
     initialize_app()
     translation_manager.current_language=args.language
-    speech_manager = PersonaSpeechManager(default_tone="반말")
+    speech_manager = PersonaSpeechManager(translation_manager, characters)
     
     demo.queue().launch(debug=args.debug, share=args.share, inbrowser=args.inbrowser, server_port=args.port, width=800)

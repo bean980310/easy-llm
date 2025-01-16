@@ -1,33 +1,52 @@
 # persona_speech_manager.py
-
+import logging
 from typing import Dict
+from database import load_system_presets
 
-
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 class PersonaSpeechManager:
-    def __init__(self, characters: Dict[str, Dict[str, str]]):
+    def __init__(self, translation_manager, characters: Dict[str, Dict[str, str]]):
         """
         :param characters: 캐릭터 이름을 키로 하고, 각 캐릭터의 설정을 값으로 가지는 딕셔너리
                            예: {
-                               "친구": {"default_tone": "반말", "language": "ko"},
-                               "선생님": {"default_tone": "존댓말", "language": "ko"},
-                               "영어친구": {"default_tone": "casual", "language": "en"}
+                               "친구": {"default_tone": "반말", "languages": "ko"},
+                               "선생님": {"default_tone": "존댓말", "languages": "ko"},
+                               "영어친구": {"default_tone": "casual", "languages": "en"}
                            }
         """
+        self.translation_manager = translation_manager
         self.characters = characters
         self.current_character = None  # 현재 선택된 캐릭터
         self.current_language = None
+        self.current_system_preset = None
     
-    def set_character(self, character_name: str, interface_language: str):
+    def set_character_and_language(self, character_name: str, language: str):
         if character_name in self.characters:
             self.current_character = character_name
-            # 인터페이스 언어가 캐릭터의 지원 언어에 포함되면 해당 언어로 설정
-            if interface_language in self.characters[character_name]["languages"]:
-                self.current_language = interface_language
+            if language in self.characters[character_name]["languages"]:
+                self.current_language = language
             else:
-                # 지원하지 않는 언어일 경우 기본 언어로 설정
-                self.current_language = self.characters[character_name]["default_tone"]
+                self.current_language = self.characters[character_name]["default_language"]
+                logger.warning(f"Language '{language}' not supported by '{character_name}'. Using default language '{self.current_language}'.")
+            
+            # 시스템 메시지 프리셋 불러오기
+            presets = load_system_presets(self.current_language)
+            preset_name = self.characters[character_name]["preset_name"]
+            if preset_name in presets:
+                self.current_system_preset = presets[preset_name]
+                logger.info(f"Loaded system preset for {preset_name} in language {self.current_language}")
+            else:
+                self.current_system_preset = "당신은 유용한 AI 비서입니다."
+                logger.warning(f"Preset '{preset_name}' not found for language {self.current_language}. Using default.")
         else:
             raise ValueError(f"캐릭터 '{character_name}'이(가) 존재하지 않습니다.")
+    
+    def get_system_message(self) -> str:
+        return self.current_system_preset or "당신은 유용한 AI 비서입니다."
+
+    def get_available_presets(self, language: str) -> Dict[str, str]:
+        return load_system_presets(language)
     
     def update_tone(self, user_input: str):
         """
@@ -65,11 +84,6 @@ class PersonaSpeechManager:
                 return self.convert_to_casual(content)
             elif tone == "존댓말":
                 return self.convert_to_formal(content)
-        elif language == "en":
-            if tone == "casual":
-                return self.convert_to_casual_english(content)
-            elif tone == "formal":
-                return self.convert_to_formal_english(content)
         elif language == "ja":
             if tone == "カジュアル":
                 return self.convert_to_casual_japanese(content)
@@ -85,6 +99,11 @@ class PersonaSpeechManager:
                 return self.convert_to_casual_traditional_chinese(content)
             elif tone == "正式":
                 return self.convert_to_formal_traditional_chinese(content)
+        elif language == "en":
+            if tone == "casual":
+                return self.convert_to_casual_english(content)
+            elif tone == "formal":
+                return self.convert_to_formal_english(content)
         # 다른 언어의 변환 로직 추가 가능
         return content
 

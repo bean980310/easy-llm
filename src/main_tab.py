@@ -4,26 +4,12 @@ import os
 
 from models import get_all_local_models, generate_answer
 from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets
-from translations import detect_system_language, translation_manager
+from translations import detect_system_language, TranslationManager, translation_manager
 
 from src.preset_images import PRESET_IMAGES
 from src.api_models import api_models
 
 from persona_speech_manager import PersonaSpeechManager
-
-characters={
-    "미나미 아스카": {
-        "default_tone": "반말", 
-        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
-    },
-    "마코토노 아오이": {
-        "default_tone": "반말", 
-        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
-    },
-    "아이노 코이토": {"default_tone": "반말", 
-        "language": ["ko", "ja", "zh_CN", "zh_TW", "en"]
-    },
-}
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -42,13 +28,33 @@ default_language = detect_system_language()
 
 DEFAULT_PROFILE_IMAGE = None
 
-speech_manager = PersonaSpeechManager(characters=characters)
+characters={
+    "미나미 아스카": {
+        "default_tone": "반말", 
+        "languages": ["ko", "ja", "zh_CN", "zh_TW", "en"],
+        "preset_name": "MINAMI_ASUKA_PRESET",
+        "profile_image": "assets/1_minami_asuka.png"
+    },
+    "마코토노 아오이": {
+        "default_tone": "반말", 
+        "languages": ["ko", "ja", "zh_CN", "zh_TW", "en"],
+        "preset_name": "MAKOTONO_AOI_PRESET",
+        "profile_image": "assets/2_makotono_aoi.png"
+    },
+    "아이노 코이토": {"default_tone": "반말", 
+        "languages": ["ko", "ja", "zh_CN", "zh_TW", "en"],
+        "preset_name": "AINO_KOITO_PRESET",
+        "profile_image": "assets/3_aino_koito.png"
+    },
+}
+
+speech_manager = PersonaSpeechManager(translation_manager=translation_manager, characters=characters)
 
 session_speech_managers = {}
 
 def get_speech_manager(session_id: str) -> PersonaSpeechManager:
     if session_id not in session_speech_managers:
-        session_speech_managers[session_id] = PersonaSpeechManager(characters=characters)
+        session_speech_managers[session_id] = PersonaSpeechManager(translation_manager=translation_manager, characters=characters)
     return session_speech_managers[session_id]
 
 class MainTab:
@@ -128,7 +134,7 @@ class MainTab:
         speech_manager = get_speech_manager(session_id)
         
         try:
-            speech_manager.set_character(selected_character)
+            speech_manager.set_character_and_language(selected_character, language)
         except ValueError as e:
             history.append({"role": "assistant", "content": f"❌ {str(e)}"})
             return "", history, self.filter_messages_for_chatbot(history), "❌ 캐릭터 설정 오류"
@@ -172,7 +178,7 @@ class MainTab:
         # 업데이트된 히스토리를 Chatbot 형식으로 변환
         chatbot_history = self.filter_messages_for_chatbot(history)
 
-        return "", history, chatbot_history, status
+        return "", history, chatbot_history
     
     def determine_model_type(self, selected_model):
         if selected_model in api_models:
@@ -201,7 +207,7 @@ class MainTab:
         for msg in history:
             if msg["role"] in ("user", "assistant"):
                 content = msg["content"] or ""
-                character = msg.get("character", "")
+                character = msg.get("assistent", "")
                 if character:
                     display_content = f"**{character}:** {content}"
                 else:
@@ -365,3 +371,20 @@ class MainTab:
                 
         updated_list = sorted(list(dict.fromkeys(updated_list)))
         return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
+    
+def update_system_message_and_profile(character_name, language_display_name):
+    """
+    캐릭터와 언어 선택 시 호출되는 함수.
+    - 캐릭터와 언어 설정 적용
+    - 시스템 메시지 프리셋 업데이트
+    """
+    try:
+        language_code = translation_manager.get_language_code(language_display_name)
+        speech_manager.set_character_and_language(character_name, language_code)
+        system_message = speech_manager.get_system_message()
+        
+        selected_profile_image = characters[character_name]["profile_image"]
+        return system_message, selected_profile_image
+    except ValueError as ve:
+        logger.error(f"Character setting error: {ve}")
+        return "시스템 메시지 로딩 중 오류가 발생했습니다."

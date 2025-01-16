@@ -1,7 +1,7 @@
 # translations.py
 
 import locale
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 import json
 import os
 from pathlib import Path
@@ -525,6 +525,34 @@ class TranslationManager:
         """사용 가능한 언어 코드 목록"""
         return list(self.translations.keys())
 
+    def get_language_code(self, display_name: str) -> str:
+        """디스플레이 이름을 언어 코드로 변환"""
+        language_map = {
+            '한국어': 'ko',
+            'English': 'en',
+            '日本語': 'ja',
+            '中文(简体)': 'zh',
+            '中文(繁體)': 'zh-tw',
+            # 필요 시 추가 언어 매핑
+        }
+        language_code = language_map.get(display_name)
+        if not language_code:
+            logger.warning(f"알 수 없는 언어 선택: {display_name}. 기본 언어 '{self.default_language}' 사용.")
+            language_code = self.default_language
+        return language_code
+    
+    def get_available_languages_display_names(self) -> List[str]:
+        """사용 가능한 언어의 디스플레이 이름 목록을 반환"""
+        return list({
+            '한국어': 'ko',
+            'English': 'en',
+            '日本語': 'ja',
+            '中文(简体)': 'zh',
+            '中文(繁體)': 'zh-tw',
+            # 필요 시 추가 언어
+        }.keys())
+
+    
     def get_language_display_name(self, lang_code: str) -> str:
         """언어 코드에 대한 표시 이름"""
         display_names = {
