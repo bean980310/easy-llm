@@ -299,7 +299,7 @@ class MainTab:
         sessions = get_existing_sessions()
         if not sessions:
             return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
-        return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
+        return gr.update(choices=sessions, value=sessions[0])
 
     def create_new_session(self, system_message_box_value: str):
         """

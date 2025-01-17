@@ -309,7 +309,7 @@ args=parse_args()
 
 refresh_session_list=main_tab.refresh_sessions()
 
-with gr.Blocks() as demo:
+with gr.Blocks(css="style.css") as demo:
     speech_manager_state = gr.State(initialize_speech_manager)
     
     session_id, loaded_history, session_dropdown, session_label=on_app_start()
@@ -355,6 +355,17 @@ with gr.Blocks() as demo:
         initial_choices = api_models + transformers_local + gguf_local + mlx_local
         initial_choices = list(dict.fromkeys(initial_choices))
         initial_choices = sorted(initial_choices)  # 정렬 추가
+        with gr.Row():
+            # (예시) "세션 선택" Dropdown 추가
+            session_select_dropdown = gr.Dropdown(
+                label="세션 선택",
+                choices=[],  # 앱 시작 시 혹은 별도의 로직으로 세션 목록을 채움
+                value=None,
+                interactive=True
+            )
+            add_session_icon_btn = gr.Button("📝", elem_id="add_session_btn", variant="secondary")
+            delete_session_icon_btn = gr.Button("🗑️", elem_id="delete_session_btn", variant="stop")
+            session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
 
         with gr.Row():
             model_type_dropdown = gr.Radio(
@@ -375,16 +386,6 @@ with gr.Blocks() as demo:
             visible=False  # 기본적으로 숨김
         )
         image_info = gr.Markdown("", visible=False)
-        with gr.Row():
-            # (예시) "세션 선택" Dropdown 추가
-            session_select_dropdown = gr.Dropdown(
-                label="세션 선택",
-                choices=[],  # 앱 시작 시 혹은 별도의 로직으로 세션 목록을 채움
-                value=None,
-                interactive=True
-            )
-
-            session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
 
         # 아래는 변경 이벤트 등록
         def apply_session_immediately(chosen_sid):
@@ -398,6 +399,35 @@ with gr.Blocks() as demo:
                 return gr.update(choices=[], value=None)
             return gr.update(choices=sessions, value=sessions[0])
         
+        def create_session():
+            # 실제로는 main_tab.create_new_session(...) 같은 함수 호출
+            new_sid, info = main_tab.create_new_session(system_message_box.value)
+            return new_sid, info
+        
+        add_session_icon_btn.click(
+            fn=create_session,
+            inputs=[],
+            outputs=[]  # 필요하다면 session_id_state, session_select_dropdown 등 갱신
+        ).then(
+            fn=main_tab.refresh_sessions,
+            inputs=[],
+            outputs=[session_select_dropdown]  # 세션 목록 즉시 갱신
+        )
+        
+        def delete_selected_session(chosen_sid):
+            # 선택된 세션을 삭제 (주의: None 또는 ""인 경우 처리)
+            result_msg, _, updated_dropdown = main_tab.delete_session(chosen_sid, "demo_session")
+            return result_msg, updated_dropdown
+        
+        delete_session_icon_btn.click(
+            fn=lambda: delete_selected_session(session_select_dropdown.value),
+            inputs=[],
+            outputs=[]  # 필요 시 Textbox나 Dropdown 업데이트
+        ).then(
+            fn=main_tab.refresh_sessions,
+            inputs=[],
+            outputs=[session_select_dropdown]
+        )
         with gr.Column():
             preset_dropdown = gr.Dropdown(
                 label="프리셋 선택",
@@ -720,6 +750,10 @@ with gr.Blocks() as demo:
             inputs=[],
             outputs=[reset_all_confirm_row],
             queue=False
+        ).then(
+            fn=main_tab.refresh_sessions,
+            inputs=[],
+            outputs=[session_select_dropdown]
         )
 
         # "모든 세션 초기화"의 "아니요" 버튼 클릭 시 확인 메시지 숨김
@@ -731,8 +765,8 @@ with gr.Blocks() as demo:
         )
         
         demo.load(
-            fn=init_session_dropdown,  # 또는 main_tab의 다른 메서드
-            inputs=[session_list_state],
+            fn=main_tab.refresh_sessions,
+            inputs=[],
             outputs=[session_select_dropdown],
             queue=False
         )
@@ -1124,7 +1158,11 @@ with gr.Blocks() as demo:
                 refresh_sessions_btn.click(
                     fn=main_tab.refresh_sessions,
                     inputs=[],
-                    outputs=[existing_sessions_dropdown, session_manage_info]
+                    outputs=[existing_sessions_dropdown]
+                ).then(
+                    fn=main_tab.refresh_sessions,
+                    inputs=[],
+                    outputs=[session_select_dropdown]
                 )
                 
                 # (2) 새 세션 생성
@@ -1140,6 +1178,10 @@ with gr.Blocks() as demo:
                     fn=main_tab.filter_messages_for_chatbot,
                     inputs=[history_state],
                     outputs=[chatbot]
+                ).then(
+                    fn=main_tab.refresh_sessions,
+                    inputs=[],
+                    outputs=[session_select_dropdown]
                 )
                 
                 apply_session_btn.click(
@@ -1150,6 +1192,10 @@ with gr.Blocks() as demo:
                     fn=main_tab.filter_messages_for_chatbot,
                     inputs=[history_state],
                     outputs=[chatbot]
+                ).then(
+                    fn=main_tab.refresh_sessions,
+                    inputs=[],
+                    outputs=[session_select_dropdown]
                 )
                 
                 with gr.Row(visible=False) as delete_session_confirm_row:
@@ -1178,6 +1224,10 @@ with gr.Blocks() as demo:
                     inputs=[],
                     outputs=[delete_session_confirm_row],
                     queue=False
+                ).then(
+                    fn=main_tab.refresh_sessions,
+                    inputs=[],
+                    outputs=[session_select_dropdown]
                 )
 
                 # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기

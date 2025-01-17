@@ -1,0 +1,17 @@
+#add_session_btn > button {
+    width: 50px;
+    height: 50px;
+    border-radius: 4px;
+    font-size: 20px;
+    padding: 0;
+    margin: 0;
+}
+
+#delete_session_btn > button {
+    width: 50px;
+    height: 50px;
+    border-radius: 4px;
+    font-size: 20px;
+    padding: 0;
+    margin: 0;
+}
