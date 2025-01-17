@@ -336,6 +336,7 @@ with gr.Blocks(css=css) as demo:
                 title = gr.Markdown(f"## {_('main_title')}", elem_classes="title")
                 session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
             with gr.Column(scale=1):
+                settings_button = gr.Button("⚙️ Settings", elem_classes="settings-button")
                 language_dropdown = gr.Dropdown(
                     label=_('language_select'),
                     choices=["한국어", "日本語", "中文(简体)", "中文(繁體)", "English"],
@@ -797,344 +798,366 @@ with gr.Blocks(css=css) as demo:
         outputs=[chatbot]
     )
         
+    with gr.Column(visible=False, elem_classes="settings-popup") as settings_popup:
+        with gr.Row(elem_classes="popup-header"):
+            gr.Markdown("## Settings")
+            close_settings_btn = gr.Button("✕", elem_classes="close-button")
             
-    create_download_tab()
-    create_cache_tab(model_dropdown, language_dropdown)
-    create_util_tab()
-        
-    with gr.Tab("설정"):
-        gr.Markdown("### 설정")
-
         with gr.Tabs():
-            # 사용자 지정 모델 경로 설정 섹션
-            create_custom_model_tab(custom_model_path_state)
+            create_download_tab()
+            create_cache_tab(model_dropdown, language_dropdown)
+            create_util_tab()
+        
+            with gr.Tab("설정"):
+                gr.Markdown("### 설정")
 
-            # 시스템 메시지 프리셋 관리 섹션 추가
-            with gr.Tab("시스템 메시지 프리셋 관리"):
-                create_system_preset_management_tab(
-                    default_language=default_language,
-                    session_id_state=session_id_state,
-                    history_state=history_state,
-                    selected_language_state=selected_language_state,
-                    system_message_box=system_message_box,
-                    profile_image=profile_image,
-                    chatbot=chatbot
-                )
-                # 프리셋 Dropdown 초기화
-                demo.load(
-                    fn=main_tab.initial_load_presets,
-                    inputs=[],
-                    outputs=[preset_dropdown],
-                    queue=False
-                )
-                
-            # 채팅 기록 저장 섹션
-            with gr.Tab("채팅 기록 저장"):
-                save_button = gr.Button("채팅 기록 저장", variant="secondary")
-                save_info = gr.Textbox(label="저장 결과", interactive=False)
+                with gr.Tabs():
+                    # 사용자 지정 모델 경로 설정 섹션
+                    create_custom_model_tab(custom_model_path_state)
 
-                save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
-                save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
+                    # 시스템 메시지 프리셋 관리 섹션 추가
+                    with gr.Tab("시스템 메시지 프리셋 관리"):
+                        create_system_preset_management_tab(
+                            default_language=default_language,
+                            session_id_state=session_id_state,
+                            history_state=history_state,
+                            selected_language_state=selected_language_state,
+                            system_message_box=system_message_box,
+                            profile_image=profile_image,
+                            chatbot=chatbot
+                        )
+                        # 프리셋 Dropdown 초기화
+                        demo.load(
+                            fn=main_tab.initial_load_presets,
+                            inputs=[],
+                            outputs=[preset_dropdown],
+                            queue=False
+                        )
+                        
+                    # 채팅 기록 저장 섹션
+                    with gr.Tab("채팅 기록 저장"):
+                        save_button = gr.Button("채팅 기록 저장", variant="secondary")
+                        save_info = gr.Textbox(label="저장 결과", interactive=False)
 
-                save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
-                save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
+                        save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
+                        save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
 
-                def save_chat_button_click_csv(history):
-                    if not history:
-                        return "채팅 이력이 없습니다."
-                    saved_path = save_chat_history_csv(history)
-                    if saved_path is None:
-                        return "❌ 채팅 기록 CSV 저장 실패"
-                    else:
-                        return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
+                        save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
+                        save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
+
+                        def save_chat_button_click_csv(history):
+                            if not history:
+                                return "채팅 이력이 없습니다."
+                            saved_path = save_chat_history_csv(history)
+                            if saved_path is None:
+                                return "❌ 채팅 기록 CSV 저장 실패"
+                            else:
+                                return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
+                            
+                        def save_chat_button_click_db(history):
+                            if not history:
+                                return "채팅 이력이 없습니다."
+                            ok = save_chat_history_db(history, session_id="demo_session")
+                            if ok:
+                                return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
+                            else:
+                                return "❌ DB 저장 실패"
+
+                        save_csv_button.click(
+                            fn=save_chat_button_click_csv,
+                            inputs=[history_state],
+                            outputs=save_csv_info
+                        )
+
+                        # save_button이 클릭되면 save_chat_button_click 실행
+                        save_button.click(
+                            fn=save_chat_button_click,
+                            inputs=[history_state],
+                            outputs=save_info
+                        )
+                        
+                        save_db_button.click(
+                            fn=save_chat_button_click_db,
+                            inputs=[history_state],
+                            outputs=save_db_info
+                        )
+
+                    # 채팅 히스토리 재로드 섹션
+                    with gr.Tab("채팅 히스토리 재로드"):
+                        upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
+                        load_info = gr.Textbox(label="로딩 결과", interactive=False)
+                        
+                        def load_chat_from_json(json_file):
+                            """
+                            업로드된 JSON 파일을 파싱하여 history_state에 주입
+                            """
+                            if not json_file:
+                                return [], "파일이 없습니다."
+                            try:
+                                with open(json_file.name, "r", encoding="utf-8") as f:
+                                    data = json.load(f)
+                                if not isinstance(data, list):
+                                    return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
+                                # data를 그대로 history_state로 반환
+                                return data, "✅ 대화가 로딩되었습니다."
+                            except Exception as e:
+                                logger.error(f"JSON 로드 오류: {e}")
+                                return [], f"❌ 로딩 실패: {e}"
+
+                        upload_json.change(
+                            fn=load_chat_from_json,
+                            inputs=[upload_json],
+                            outputs=[history_state, load_info]
+                        )
+
+                    # 세션 관리 섹션
+                    with gr.Tab("세션 관리"):
+                        gr.Markdown("### 세션 관리")
+                        with gr.Row():
+                            refresh_sessions_btn = gr.Button("세션 목록 갱신")
+                            existing_sessions_dropdown = gr.Dropdown(
+                                label="기존 세션 목록",
+                                choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
+                                value=None,
+                                interactive=True
+                            )
+                            current_session_display = gr.Textbox(
+                                label="현재 세션 ID",
+                                value="",
+                                interactive=False
+                            )
+                        
+                        with gr.Row():
+                            create_new_session_btn = gr.Button("새 세션 생성")
+                            apply_session_btn = gr.Button("세션 적용")
+                            delete_session_btn = gr.Button("세션 삭제")
+                        
+                        session_manage_info = gr.Textbox(
+                            label="세션 관리 결과",
+                            interactive=False
+                        )
+                        
+                        current_session_display = gr.Textbox(
+                            label="현재 세션 ID",
+                            value="",
+                            interactive=False
+                        )
+
+                        session_id_state.change(
+                            fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
+                            inputs=[session_id_state],
+                            outputs=[current_session_display]
+                        )
+                        
+                        refresh_sessions_btn.click(
+                            fn=main_tab.refresh_sessions,
+                            inputs=[],
+                            outputs=[existing_sessions_dropdown]
+                        ).then(
+                            fn=main_tab.refresh_sessions,
+                            inputs=[],
+                            outputs=[session_select_dropdown]
+                        )
+                        
+                        # (2) 새 세션 생성
+                        create_new_session_btn.click(
+                            fn=lambda: main_tab.create_new_session(system_message_box.value),
+                            inputs=[],
+                            outputs=[session_id_state, session_manage_info]
+                        ).then(
+                            fn=lambda: [],
+                            inputs=[],
+                            outputs=[history_state]
+                        ).then(
+                            fn=main_tab.filter_messages_for_chatbot,
+                            inputs=[history_state],
+                            outputs=[chatbot]
+                        ).then(
+                            fn=main_tab.refresh_sessions,
+                            inputs=[],
+                            outputs=[session_select_dropdown]
+                        )
+                        
+                        apply_session_btn.click(
+                            fn=main_tab.apply_session,
+                            inputs=[existing_sessions_dropdown],
+                            outputs=[history_state, session_id_state, session_manage_info]
+                        ).then(
+                            fn=main_tab.filter_messages_for_chatbot,
+                            inputs=[history_state],
+                            outputs=[chatbot]
+                        ).then(
+                            fn=main_tab.refresh_sessions,
+                            inputs=[],
+                            outputs=[session_select_dropdown]
+                        )
+                        
+                        with gr.Row(visible=False) as delete_session_confirm_row:
+                                delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
+                                delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
+                                delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
+
+                        # “세션 삭제” 버튼 클릭 시, 확인창(문구/버튼) 보이기
+                        delete_session_btn.click(
+                            fn=lambda: (
+                                gr.update(visible=True),
+                                gr.update(visible=True), 
+                                gr.update(visible=True)
+                            ),
+                            inputs=[],
+                            outputs=[delete_session_confirm_row, delete_session_yes_btn, delete_session_no_btn]
+                        )
+
+                        # (5) 예 버튼 → 실제 세션 삭제
+                        delete_session_yes_btn.click(
+                            fn=main_tab.delete_session,
+                            inputs=[existing_sessions_dropdown, session_id_state],
+                            outputs=[session_manage_info, delete_session_confirm_msg, existing_sessions_dropdown]
+                        ).then(
+                            fn=lambda: (gr.update(visible=False)),
+                            inputs=[],
+                            outputs=[delete_session_confirm_row],
+                            queue=False
+                        ).then(
+                            fn=main_tab.refresh_sessions,
+                            inputs=[],
+                            outputs=[session_select_dropdown]
+                        )
+
+                        # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기
+                        delete_session_no_btn.click(
+                            fn=lambda: (
+                                "❌ 삭제가 취소되었습니다.",
+                                gr.update(visible=False)
+                            ),
+                            inputs=[],
+                            outputs=[session_manage_info, delete_session_confirm_row],
+                            queue=False
+                        )
+                    with gr.Tab("장치 설정"):
+                        device_dropdown = gr.Dropdown(
+                            label="사용할 장치 선택",
+                            choices=["Auto (Recommended)", "CPU", "GPU"],
+                            value="Auto (Recommended)",
+                            info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
+                        )
+                        device_info = gr.Textbox(
+                            label="장치 정보",
+                            value=f"현재 기본 장치: {default_device.upper()}",
+                            interactive=False
+                        )
+                        
+                        device_dropdown.change(
+                            fn=set_device,
+                            inputs=[device_dropdown],
+                            outputs=[device_info, gr.State(default_device)],
+                            queue=False
+                        )
                     
-                def save_chat_button_click_db(history):
-                    if not history:
-                        return "채팅 이력이 없습니다."
-                    ok = save_chat_history_db(history, session_id="demo_session")
-                    if ok:
-                        return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
-                    else:
-                        return "❌ DB 저장 실패"
-
-                save_csv_button.click(
-                    fn=save_chat_button_click_csv,
-                    inputs=[history_state],
-                    outputs=save_csv_info
-                )
-
-                # save_button이 클릭되면 save_chat_button_click 실행
-                save_button.click(
-                    fn=save_chat_button_click,
-                    inputs=[history_state],
-                    outputs=save_info
-                )
+            with gr.Tab("SD Prompt 생성"):
+                gr.Markdown("# Stable Diffusion 프롬프트 생성기")
                 
-                save_db_button.click(
-                    fn=save_chat_button_click_db,
-                    inputs=[history_state],
-                    outputs=save_db_info
-                )
-
-            # 채팅 히스토리 재로드 섹션
-            with gr.Tab("채팅 히스토리 재로드"):
-                upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
-                load_info = gr.Textbox(label="로딩 결과", interactive=False)
-                
-                def load_chat_from_json(json_file):
-                    """
-                    업로드된 JSON 파일을 파싱하여 history_state에 주입
-                    """
-                    if not json_file:
-                        return [], "파일이 없습니다."
-                    try:
-                        with open(json_file.name, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        if not isinstance(data, list):
-                            return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
-                        # data를 그대로 history_state로 반환
-                        return data, "✅ 대화가 로딩되었습니다."
-                    except Exception as e:
-                        logger.error(f"JSON 로드 오류: {e}")
-                        return [], f"❌ 로딩 실패: {e}"
-
-                upload_json.change(
-                    fn=load_chat_from_json,
-                    inputs=[upload_json],
-                    outputs=[history_state, load_info]
-                )
-
-            # 세션 관리 섹션
-            with gr.Tab("세션 관리"):
-                gr.Markdown("### 세션 관리")
                 with gr.Row():
-                    refresh_sessions_btn = gr.Button("세션 목록 갱신")
-                    existing_sessions_dropdown = gr.Dropdown(
-                        label="기존 세션 목록",
-                        choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
-                        value=None,
+                    user_input_sd = gr.Textbox(
+                        label="이미지 설명",
+                        placeholder="예: 해질녘의 아름다운 해변 풍경",
+                        lines=2
+                    )
+                    generate_prompt_btn = gr.Button("프롬프트 생성")
+                
+                with gr.Row():
+                    selected_model_sd = gr.Dropdown(
+                        label="언어 모델 선택",
+                        choices=generator_choices,
+                        value="gpt-3.5-turbo",
                         interactive=True
                     )
-                    current_session_display = gr.Textbox(
-                        label="현재 세션 ID",
-                        value="",
-                        interactive=False
+                    model_type_sd = gr.Dropdown(
+                        label="모델 유형",
+                        choices=["api", "transformers", "gguf", "mlx"],
+                        value="api",
+                        interactive=False  # 자동 설정되므로 사용자가 변경하지 못하도록 설정
                     )
                 
-                with gr.Row():
-                    create_new_session_btn = gr.Button("새 세션 생성")
-                    apply_session_btn = gr.Button("세션 적용")
-                    delete_session_btn = gr.Button("세션 삭제")
+                api_key_sd = gr.Textbox(
+                    label="OpenAI API Key",
+                    type="password",
+                    visible=True
+                )
                 
-                session_manage_info = gr.Textbox(
-                    label="세션 관리 결과",
+                prompt_output_sd = gr.Textbox(
+                    label="생성된 프롬프트",
+                    placeholder="여기에 생성된 프롬프트가 표시됩니다...",
+                    lines=4,
                     interactive=False
                 )
                 
-                current_session_display = gr.Textbox(
-                    label="현재 세션 ID",
-                    value="",
-                    interactive=False
+                # 사용자 지정 모델 경로 입력 필드
+                custom_model_path_sd = gr.Textbox(
+                    label="사용자 지정 모델 경로",
+                    placeholder="./models/custom-model",
+                    visible=False
                 )
+                
+                # 모델 선택 시 모델 유형 자동 설정 및 API Key 필드 가시성 제어
+                def update_model_type(selected_model):
+                    if selected_model in api_models:
+                        model_type = "api"
+                        api_visible = True
+                        custom_visible = False
+                    elif selected_model in transformers_local:
+                        model_type = "transformers"
+                        api_visible = False
+                        custom_visible = False
+                    elif selected_model in gguf_local:
+                        model_type = "gguf"
+                        api_visible = False
+                        custom_visible = False
+                    elif selected_model in mlx_local:
+                        model_type = "mlx"
+                        api_visible = False
+                        custom_visible = False
+                    elif selected_model == "사용자 지정 모델 경로 변경":
+                        model_type = "transformers"  # 기본값 설정 (필요 시 수정)
+                        api_visible = False
+                        custom_visible = True
+                    else:
+                        model_type = "transformers"
+                        api_visible = False
+                        custom_visible = False
+                    
+                    return gr.update(value=model_type), gr.update(visible=api_visible), gr.update(visible=custom_visible)
+                
+                selected_model_sd.change(
+                    fn=update_model_type,
+                    inputs=[selected_model_sd],
+                    outputs=[model_type_sd, api_key_sd, custom_model_path_sd]
+                )
+                
+                # 프롬프트 생성 버튼 클릭 시 함수 연결
+                generate_prompt_btn.click(
+                    fn=generate_stable_diffusion_prompt_cached,
+                    inputs=[user_input_sd, selected_model_sd, model_type_sd, custom_model_path_sd, api_key_sd],
+                    outputs=prompt_output_sd
+                )
+        
+    # 팝업 동작을 위한 이벤트 핸들러 추가
+    def toggle_settings_popup():
+        return gr.update(visible=True)
 
-                session_id_state.change(
-                    fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
-                    inputs=[session_id_state],
-                    outputs=[current_session_display]
-                )
-                
-                refresh_sessions_btn.click(
-                    fn=main_tab.refresh_sessions,
-                    inputs=[],
-                    outputs=[existing_sessions_dropdown]
-                ).then(
-                    fn=main_tab.refresh_sessions,
-                    inputs=[],
-                    outputs=[session_select_dropdown]
-                )
-                
-                # (2) 새 세션 생성
-                create_new_session_btn.click(
-                    fn=lambda: main_tab.create_new_session(system_message_box.value),
-                    inputs=[],
-                    outputs=[session_id_state, session_manage_info]
-                ).then(
-                    fn=lambda: [],
-                    inputs=[],
-                    outputs=[history_state]
-                ).then(
-                    fn=main_tab.filter_messages_for_chatbot,
-                    inputs=[history_state],
-                    outputs=[chatbot]
-                ).then(
-                    fn=main_tab.refresh_sessions,
-                    inputs=[],
-                    outputs=[session_select_dropdown]
-                )
-                
-                apply_session_btn.click(
-                    fn=main_tab.apply_session,
-                    inputs=[existing_sessions_dropdown],
-                    outputs=[history_state, session_id_state, session_manage_info]
-                ).then(
-                    fn=main_tab.filter_messages_for_chatbot,
-                    inputs=[history_state],
-                    outputs=[chatbot]
-                ).then(
-                    fn=main_tab.refresh_sessions,
-                    inputs=[],
-                    outputs=[session_select_dropdown]
-                )
-                
-                with gr.Row(visible=False) as delete_session_confirm_row:
-                        delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
-                        delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
-                        delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
+    def close_settings_popup():
+        return gr.update(visible=False)
 
-                # “세션 삭제” 버튼 클릭 시, 확인창(문구/버튼) 보이기
-                delete_session_btn.click(
-                    fn=lambda: (
-                        gr.update(visible=True),
-                        gr.update(visible=True), 
-                        gr.update(visible=True)
-                    ),
-                    inputs=[],
-                    outputs=[delete_session_confirm_row, delete_session_yes_btn, delete_session_no_btn]
-                )
+    settings_button.click(
+        fn=toggle_settings_popup,
+        outputs=settings_popup
+    )
 
-                # (5) 예 버튼 → 실제 세션 삭제
-                delete_session_yes_btn.click(
-                    fn=main_tab.delete_session,
-                    inputs=[existing_sessions_dropdown, session_id_state],
-                    outputs=[session_manage_info, delete_session_confirm_msg, existing_sessions_dropdown]
-                ).then(
-                    fn=lambda: (gr.update(visible=False)),
-                    inputs=[],
-                    outputs=[delete_session_confirm_row],
-                    queue=False
-                ).then(
-                    fn=main_tab.refresh_sessions,
-                    inputs=[],
-                    outputs=[session_select_dropdown]
-                )
-
-                # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기
-                delete_session_no_btn.click(
-                    fn=lambda: (
-                        "❌ 삭제가 취소되었습니다.",
-                        gr.update(visible=False)
-                    ),
-                    inputs=[],
-                    outputs=[session_manage_info, delete_session_confirm_row],
-                    queue=False
-                )
-            with gr.Tab("장치 설정"):
-                device_dropdown = gr.Dropdown(
-                    label="사용할 장치 선택",
-                    choices=["Auto (Recommended)", "CPU", "GPU"],
-                    value="Auto (Recommended)",
-                    info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
-                )
-                device_info = gr.Textbox(
-                    label="장치 정보",
-                    value=f"현재 기본 장치: {default_device.upper()}",
-                    interactive=False
-                )
-                
-                device_dropdown.change(
-                    fn=set_device,
-                    inputs=[device_dropdown],
-                    outputs=[device_info, gr.State(default_device)],
-                    queue=False
-                )
-            
-    with gr.Tab("SD Prompt 생성"):
-        gr.Markdown("# Stable Diffusion 프롬프트 생성기")
-        
-        with gr.Row():
-            user_input_sd = gr.Textbox(
-                label="이미지 설명",
-                placeholder="예: 해질녘의 아름다운 해변 풍경",
-                lines=2
-            )
-            generate_prompt_btn = gr.Button("프롬프트 생성")
-        
-        with gr.Row():
-            selected_model_sd = gr.Dropdown(
-                label="언어 모델 선택",
-                choices=generator_choices,
-                value="gpt-3.5-turbo",
-                interactive=True
-            )
-            model_type_sd = gr.Dropdown(
-                label="모델 유형",
-                choices=["api", "transformers", "gguf", "mlx"],
-                value="api",
-                interactive=False  # 자동 설정되므로 사용자가 변경하지 못하도록 설정
-            )
-        
-        api_key_sd = gr.Textbox(
-            label="OpenAI API Key",
-            type="password",
-            visible=True
-        )
-        
-        prompt_output_sd = gr.Textbox(
-            label="생성된 프롬프트",
-            placeholder="여기에 생성된 프롬프트가 표시됩니다...",
-            lines=4,
-            interactive=False
-        )
-        
-        # 사용자 지정 모델 경로 입력 필드
-        custom_model_path_sd = gr.Textbox(
-            label="사용자 지정 모델 경로",
-            placeholder="./models/custom-model",
-            visible=False
-        )
-        
-        # 모델 선택 시 모델 유형 자동 설정 및 API Key 필드 가시성 제어
-        def update_model_type(selected_model):
-            if selected_model in api_models:
-                model_type = "api"
-                api_visible = True
-                custom_visible = False
-            elif selected_model in transformers_local:
-                model_type = "transformers"
-                api_visible = False
-                custom_visible = False
-            elif selected_model in gguf_local:
-                model_type = "gguf"
-                api_visible = False
-                custom_visible = False
-            elif selected_model in mlx_local:
-                model_type = "mlx"
-                api_visible = False
-                custom_visible = False
-            elif selected_model == "사용자 지정 모델 경로 변경":
-                model_type = "transformers"  # 기본값 설정 (필요 시 수정)
-                api_visible = False
-                custom_visible = True
-            else:
-                model_type = "transformers"
-                api_visible = False
-                custom_visible = False
-            
-            return gr.update(value=model_type), gr.update(visible=api_visible), gr.update(visible=custom_visible)
-        
-        selected_model_sd.change(
-            fn=update_model_type,
-            inputs=[selected_model_sd],
-            outputs=[model_type_sd, api_key_sd, custom_model_path_sd]
-        )
-        
-        # 프롬프트 생성 버튼 클릭 시 함수 연결
-        generate_prompt_btn.click(
-            fn=generate_stable_diffusion_prompt_cached,
-            inputs=[user_input_sd, selected_model_sd, model_type_sd, custom_model_path_sd, api_key_sd],
-            outputs=prompt_output_sd
-        )
-        
+    close_settings_btn.click(
+        fn=close_settings_popup,
+        outputs=settings_popup
+    )
+    
     demo.load(
         fn=on_app_start,
         inputs=[], # 언어 상태는 이미 초기화됨
