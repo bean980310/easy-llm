@@ -44,7 +44,10 @@ from tabs.download_tab import create_download_tab
 from tabs.util_tab import create_util_tab
 from tabs.setting_tab_custom_model import create_custom_model_tab
 from tabs.setting_tab_preset import create_system_preset_management_tab
-from tabs.device_setting import set_device
+from tabs.setting_tab_save_history import create_save_history_tab
+from tabs.setting_tab_load_history import create_load_history_tab
+from tabs.setting_tab_session_manager import create_session_management_tab
+from tabs.device_setting import set_device, create_device_setting_tab
 
 from presets import __all__ as preset_modules
 import json
@@ -814,245 +817,26 @@ with gr.Blocks(css=css) as demo:
                 with gr.Tabs():
                     # 사용자 지정 모델 경로 설정 섹션
                     create_custom_model_tab(custom_model_path_state)
-
-                    # 시스템 메시지 프리셋 관리 섹션 추가
-                    with gr.Tab("시스템 메시지 프리셋 관리"):
-                        create_system_preset_management_tab(
-                            default_language=default_language,
-                            session_id_state=session_id_state,
-                            history_state=history_state,
-                            selected_language_state=selected_language_state,
-                            system_message_box=system_message_box,
-                            profile_image=profile_image,
-                            chatbot=chatbot
-                        )
-                        # 프리셋 Dropdown 초기화
-                        demo.load(
-                            fn=main_tab.initial_load_presets,
-                            inputs=[],
-                            outputs=[preset_dropdown],
-                            queue=False
-                        )
-                        
-                    # 채팅 기록 저장 섹션
-                    with gr.Tab("채팅 기록 저장"):
-                        save_button = gr.Button("채팅 기록 저장", variant="secondary")
-                        save_info = gr.Textbox(label="저장 결과", interactive=False)
-
-                        save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
-                        save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
-
-                        save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
-                        save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
-
-                        def save_chat_button_click_csv(history):
-                            if not history:
-                                return "채팅 이력이 없습니다."
-                            saved_path = save_chat_history_csv(history)
-                            if saved_path is None:
-                                return "❌ 채팅 기록 CSV 저장 실패"
-                            else:
-                                return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
-                            
-                        def save_chat_button_click_db(history):
-                            if not history:
-                                return "채팅 이력이 없습니다."
-                            ok = save_chat_history_db(history, session_id="demo_session")
-                            if ok:
-                                return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
-                            else:
-                                return "❌ DB 저장 실패"
-
-                        save_csv_button.click(
-                            fn=save_chat_button_click_csv,
-                            inputs=[history_state],
-                            outputs=save_csv_info
-                        )
-
-                        # save_button이 클릭되면 save_chat_button_click 실행
-                        save_button.click(
-                            fn=save_chat_button_click,
-                            inputs=[history_state],
-                            outputs=save_info
-                        )
-                        
-                        save_db_button.click(
-                            fn=save_chat_button_click_db,
-                            inputs=[history_state],
-                            outputs=save_db_info
-                        )
-
-                    # 채팅 히스토리 재로드 섹션
-                    with gr.Tab("채팅 히스토리 재로드"):
-                        upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
-                        load_info = gr.Textbox(label="로딩 결과", interactive=False)
-                        
-                        def load_chat_from_json(json_file):
-                            """
-                            업로드된 JSON 파일을 파싱하여 history_state에 주입
-                            """
-                            if not json_file:
-                                return [], "파일이 없습니다."
-                            try:
-                                with open(json_file.name, "r", encoding="utf-8") as f:
-                                    data = json.load(f)
-                                if not isinstance(data, list):
-                                    return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
-                                # data를 그대로 history_state로 반환
-                                return data, "✅ 대화가 로딩되었습니다."
-                            except Exception as e:
-                                logger.error(f"JSON 로드 오류: {e}")
-                                return [], f"❌ 로딩 실패: {e}"
-
-                        upload_json.change(
-                            fn=load_chat_from_json,
-                            inputs=[upload_json],
-                            outputs=[history_state, load_info]
-                        )
-
-                    # 세션 관리 섹션
-                    with gr.Tab("세션 관리"):
-                        gr.Markdown("### 세션 관리")
-                        with gr.Row():
-                            refresh_sessions_btn = gr.Button("세션 목록 갱신")
-                            existing_sessions_dropdown = gr.Dropdown(
-                                label="기존 세션 목록",
-                                choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
-                                value=None,
-                                interactive=True
-                            )
-                            current_session_display = gr.Textbox(
-                                label="현재 세션 ID",
-                                value="",
-                                interactive=False
-                            )
-                        
-                        with gr.Row():
-                            create_new_session_btn = gr.Button("새 세션 생성")
-                            apply_session_btn = gr.Button("세션 적용")
-                            delete_session_btn = gr.Button("세션 삭제")
-                        
-                        session_manage_info = gr.Textbox(
-                            label="세션 관리 결과",
-                            interactive=False
-                        )
-                        
-                        current_session_display = gr.Textbox(
-                            label="현재 세션 ID",
-                            value="",
-                            interactive=False
-                        )
-
-                        session_id_state.change(
-                            fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
-                            inputs=[session_id_state],
-                            outputs=[current_session_display]
-                        )
-                        
-                        refresh_sessions_btn.click(
-                            fn=main_tab.refresh_sessions,
-                            inputs=[],
-                            outputs=[existing_sessions_dropdown]
-                        ).then(
-                            fn=main_tab.refresh_sessions,
-                            inputs=[],
-                            outputs=[session_select_dropdown]
-                        )
-                        
-                        # (2) 새 세션 생성
-                        create_new_session_btn.click(
-                            fn=lambda: main_tab.create_new_session(system_message_box.value),
-                            inputs=[],
-                            outputs=[session_id_state, session_manage_info]
-                        ).then(
-                            fn=lambda: [],
-                            inputs=[],
-                            outputs=[history_state]
-                        ).then(
-                            fn=main_tab.filter_messages_for_chatbot,
-                            inputs=[history_state],
-                            outputs=[chatbot]
-                        ).then(
-                            fn=main_tab.refresh_sessions,
-                            inputs=[],
-                            outputs=[session_select_dropdown]
-                        )
-                        
-                        apply_session_btn.click(
-                            fn=main_tab.apply_session,
-                            inputs=[existing_sessions_dropdown],
-                            outputs=[history_state, session_id_state, session_manage_info]
-                        ).then(
-                            fn=main_tab.filter_messages_for_chatbot,
-                            inputs=[history_state],
-                            outputs=[chatbot]
-                        ).then(
-                            fn=main_tab.refresh_sessions,
-                            inputs=[],
-                            outputs=[session_select_dropdown]
-                        )
-                        
-                        with gr.Row(visible=False) as delete_session_confirm_row:
-                                delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
-                                delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
-                                delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
-
-                        # “세션 삭제” 버튼 클릭 시, 확인창(문구/버튼) 보이기
-                        delete_session_btn.click(
-                            fn=lambda: (
-                                gr.update(visible=True),
-                                gr.update(visible=True), 
-                                gr.update(visible=True)
-                            ),
-                            inputs=[],
-                            outputs=[delete_session_confirm_row, delete_session_yes_btn, delete_session_no_btn]
-                        )
-
-                        # (5) 예 버튼 → 실제 세션 삭제
-                        delete_session_yes_btn.click(
-                            fn=main_tab.delete_session,
-                            inputs=[existing_sessions_dropdown, session_id_state],
-                            outputs=[session_manage_info, delete_session_confirm_msg, existing_sessions_dropdown]
-                        ).then(
-                            fn=lambda: (gr.update(visible=False)),
-                            inputs=[],
-                            outputs=[delete_session_confirm_row],
-                            queue=False
-                        ).then(
-                            fn=main_tab.refresh_sessions,
-                            inputs=[],
-                            outputs=[session_select_dropdown]
-                        )
-
-                        # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기
-                        delete_session_no_btn.click(
-                            fn=lambda: (
-                                "❌ 삭제가 취소되었습니다.",
-                                gr.update(visible=False)
-                            ),
-                            inputs=[],
-                            outputs=[session_manage_info, delete_session_confirm_row],
-                            queue=False
-                        )
-                    with gr.Tab("장치 설정"):
-                        device_dropdown = gr.Dropdown(
-                            label="사용할 장치 선택",
-                            choices=["Auto (Recommended)", "CPU", "GPU"],
-                            value="Auto (Recommended)",
-                            info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
-                        )
-                        device_info = gr.Textbox(
-                            label="장치 정보",
-                            value=f"현재 기본 장치: {default_device.upper()}",
-                            interactive=False
-                        )
-                        
-                        device_dropdown.change(
-                            fn=set_device,
-                            inputs=[device_dropdown],
-                            outputs=[device_info, gr.State(default_device)],
-                            queue=False
-                        )
+                    create_system_preset_management_tab(
+                        default_language=default_language,
+                        session_id_state=session_id_state,
+                        history_state=history_state,
+                        selected_language_state=selected_language_state,
+                        system_message_box=system_message_box,
+                        profile_image=profile_image,
+                        chatbot=chatbot
+                    )
+                    # 프리셋 Dropdown 초기화
+                    demo.load(
+                        fn=main_tab.initial_load_presets,
+                        inputs=[],
+                        outputs=[preset_dropdown],
+                        queue=False
+                    )                        
+                    create_save_history_tab(history_state)
+                    create_load_history_tab(history_state)
+                    session_tab, existing_sessions_dropdown, current_session_display=create_session_management_tab(session_id_state, history_state, session_select_dropdown, system_message_box, chatbot)
+                    create_device_setting_tab(default_device)
                     
             with gr.Tab("SD Prompt 생성"):
                 gr.Markdown("# Stable Diffusion 프롬프트 생성기")

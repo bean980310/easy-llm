@@ -32,3 +32,24 @@ def set_device(selection):
     device_info_message = f"선택된 장치: {device.upper()}"
     logger.info(device_info_message)
     return gr.update(value=device_info_message), device
+
+def create_device_setting_tab(default_device):
+    with gr.Tab("장치 설정"):
+        device_dropdown = gr.Dropdown(
+            label="사용할 장치 선택",
+            choices=["Auto (Recommended)", "CPU", "GPU"],
+            value="Auto (Recommended)",
+            info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
+        )
+        device_info = gr.Textbox(
+            label="장치 정보",
+            value=f"현재 기본 장치: {default_device.upper()}",
+            interactive=False
+        )
+                        
+        device_dropdown.change(
+            fn=set_device,
+            inputs=[device_dropdown],
+            outputs=[device_info, gr.State(default_device)],
+            queue=False
+        )
