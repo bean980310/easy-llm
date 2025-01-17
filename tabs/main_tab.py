@@ -6,14 +6,16 @@ import sqlite3
 
 from common.models import get_all_local_models, generate_answer
 from common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
-from common.translations import detect_system_language, TranslationManager, translation_manager
+from common.translations import TranslationManager, translation_manager
 
 from common.preset_images import PRESET_IMAGES
 from common.api_models import api_models
 from common.local_models import transformers_local, gguf_local, mlx_local
+from common.default_language import default_language
 
 import traceback
 from common.persona_speech_manager import PersonaSpeechManager
+from common.args import parse_args
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -22,8 +24,6 @@ logger = logging.getLogger(__name__)
 generator_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
 generator_choices = list(dict.fromkeys(generator_choices))  # 중복 제거
 generator_choices = sorted(generator_choices)  # 정렬
-
-default_language = detect_system_language()
 
 DEFAULT_PROFILE_IMAGE = None
 

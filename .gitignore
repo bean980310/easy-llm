@@ -1,6 +1,6 @@
 .DS_Store
 debug.ipynb
-app.log
+app.log*
 .env
 .gradio
 __pycache__

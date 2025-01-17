@@ -8,6 +8,8 @@ from pathlib import Path
 import logging
 from presets import MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
 
+from common.default_language import default_language
+
 logger = logging.getLogger(__name__)
 
 class TranslationError(Exception):
@@ -81,6 +83,7 @@ class TranslationManager:
         default_translations = {
             'ko': {
                 'main_title': '간단한 Chatbot',
+                'select_session_info': "선택된 세션이 표시됩니다.",
                 'language_select': '언어 선택',
                 'language_info': '인터페이스 언어를 선택하세요',
                 'system_message': '시스템 메시지',
@@ -89,11 +92,14 @@ class TranslationManager:
                 'tab_main': '메인',
                 'model_type_label': '모델 유형 선택',
                 'model_select_label': '모델 선택',
+                'character_select_label': "캐릭터 선택",
+                'character_select_info': "대화할 캐릭터를 선택하세요.",
                 'api_key_label': 'OpenAI API 키',
                 'image_upload_label': '이미지 업로드 (선택)',
                 'message_input_label': '메시지 입력',
                 'message_placeholder': '메시지를 입력하세요...',
                 'send_button': '전송',
+                'advanced_setting': '고급 설정',
                 'seed_label': '시드 값',
                 'seed_info': '모델의 예측을 재현 가능하게 하기 위해 시드를 설정하세요.',
                 "reset_session_button": "세션 초기화",
@@ -156,11 +162,13 @@ class TranslationManager:
                 "refresh_model_list_button": "모델 목록 새로고침",
                 "refresh_info_label": "새로고침 결과",
                 "cache_clear_all_button": "모든 모델 캐시 삭제",
-                "clear_all_result_label": "결과"
+                "clear_all_result_label": "결과",
+                "handle_character_change_invalid_error": "❌ 선택한 캐릭터가 유효하지 않습니다."
                 # 추가 번역키들...
             },
             'ja': {
                 'main_title': 'シンプルなチャットボット',
+                'select_session_info': "選択されたセッションが表示されます。",
                 'language_select': '言語選択',
                 'language_info': 'インターフェース言語を選択してください',
                 'system_message': 'システムメッセージ',
@@ -169,11 +177,14 @@ class TranslationManager:
                 'tab_main': 'メイン',
                 'model_type_label': 'モデルタイプの選択',
                 'model_select_label': 'モデルの選択',
+                'character_select_label': "キャラクター選択",
+                'character_select_info': "会話するキャラクターを選択してください。",
                 'api_key_label': 'OpenAI APIキー',
                 'image_upload_label': '画像のアップロード（オプション）',
                 'message_input_label': 'メッセージを入力',
                 'message_placeholder': 'メッセージを入力してください...',
                 'send_button': '送信',
+                'advanced_setting': '詳細設定',
                 'seed_label': 'シード値',
                 'seed_info': 'モデルの予測を再現可能にするためにシード値を設定してください。',
                 "reset_session_button": "セッション初期化",
@@ -236,11 +247,13 @@ class TranslationManager:
                 "refresh_model_list_button": "モデルリスト更新",
                 "refresh_info_label": "更新結果",
                 "cache_clear_all_button": "すべてのモデルキャッシュを削除",
-                "clear_all_result_label": "結果"
+                "clear_all_result_label": "結果",
+                "handle_character_change_invalid_error": "❌ 選択したキャラクターが無効です。"
                 # 追加の翻訳キー...
             },
             'zh_CN': {
                 'main_title': '简单聊天机器人',
+                'select_session_info': "此时将显示选定的会话。",
                 'language_select': '选择语言',
                 'language_info': '选择界面语言',
                 'system_message': '系统消息',
@@ -249,11 +262,14 @@ class TranslationManager:
                 'tab_main': '主干',
                 'model_type_label': '选择模型类型',
                 'model_select_label': '选择模型',
+                'character_select_label': "角色选择",
+                'character_select_info': "请选择要对话的角色。",
                 'api_key_label': 'OpenAI API密钥',
                 'image_upload_label': '上传图片（可选）',
                 'message_input_label': '输入消息',
                 'message_placeholder': '请输入消息...',
                 'send_button': '发送',
+                'advanced_setting': '高级设置',
                 'seed_label': '种子值',
                 'seed_info': '设置种子值以使模型预测可重现。',
                 "reset_session_button": "会话初始化",
@@ -316,11 +332,13 @@ class TranslationManager:
                 "refresh_model_list_button": "更新模型列表",
                 "refresh_info_label": "刷新结果",
                 "cache_clear_all_button": "删除所有模型缓存",
-                "clear_all_result_label": "结果"
+                "clear_all_result_label": "结果",
+                "handle_character_change_invalid_error": "❌ 选中的角色无效。"
                 # 其他翻译键...
             },
             'zh_TW': {
                 'main_title': '簡單聊天機器人',
+                'select_session_info': "此時將顯示選定的會話。",
                 'language_select': '選擇語言',
                 'language_info': '選擇界面語言',
                 'system_message': '系統消息',
@@ -329,11 +347,14 @@ class TranslationManager:
                 'tab_main': '主幹',
                 'model_type_label': '選擇模型類型',
                 'model_select_label': '選擇模型',
+                'character_select_label': "角色選擇",
+                'character_select_info': "請選擇要對話的角色。",
                 'api_key_label': 'OpenAI API密鑰',
                 'image_upload_label': '上傳圖片（可選）',
                 'message_input_label': '輸入消息',
                 'message_placeholder': '請輸入消息...',
                 'send_button': '發送',
+                'advanced_setting': '高級設置',
                 'seed_label': '種子值',
                 'seed_info': '設置種子值以使模型預測可重現。',
                 "reset_session_button": "會話初始化",
@@ -396,10 +417,12 @@ class TranslationManager:
                 "refresh_model_list_button": "更新模型列表",
                 "refresh_info_label": "刷新結果",
                 "cache_clear_all_button": "刪除所有模型緩存",
-                "clear_all_result_label": "結果"
+                "clear_all_result_label": "結果",
+                "handle_character_change_invalid_error": "❌ 選中的角色無效。"
             },
             'en': {
                 'main_title': 'Simple Chatbot',
+                'select_session_info': "The selected session is displayed.",
                 'language_select': 'Select Language',
                 'language_info': 'Choose interface language',
                 'system_message': 'System Message',
@@ -408,11 +431,14 @@ class TranslationManager:
                 'tab_main': 'Main',
                 'model_type_label': 'Select Model Type',
                 'model_select_label': 'Select Model',
+                'character_select_label': "Character selection",
+                'character_select_info': "Select the character you want to talk to.",
                 'api_key_label': 'OpenAI API Key',
                 'image_upload_label': 'Upload Image (Optional)',
                 'message_input_label': 'Enter Message',
                 'message_placeholder': 'Type your message...',
                 'send_button': 'Send',
+                'advanced_setting': 'Advanced Settings',
                 'seed_label': 'Seed Value',
                 'seed_info': 'Set a seed value to make model predictions reproducible.',
                 "reset_session_button": "Reset Session",
@@ -475,7 +501,8 @@ class TranslationManager:
                 "refresh_model_list_button": "Refresh Model List",
                 "refresh_info_label": "Refresh Results",
                 "cache_clear_all_button": "Delete all model caches",
-                "clear_all_result_label": "Results"
+                "clear_all_result_label": "Results",
+                "handle_character_change_invalid_error": "❌ The selected character is invalid."
                 # Additional translation keys...
             }
         }
@@ -564,27 +591,8 @@ class TranslationManager:
         }
         return display_names.get(lang_code, lang_code)
 
-# 시스템 언어 감지
-def detect_system_language() -> str:
-    """시스템 기본 언어를 감지합니다."""
-    try:
-        lang, _ = locale.getdefaultlocale()
-        if lang:
-            lang_code = lang.split('_')[0]
-            if lang_code == 'zh':
-                # 중국어의 경우 간체/번체 구분
-                if lang.lower() == 'zh_tw':
-                    return 'zh_TW'
-                return 'zh_CN'
-            if lang_code in ['ko', 'ja', 'en']:
-                return lang_code
-    except Exception as e:
-        logger.error(f"Error detecting system language: {e}")
-    
-    return 'ko'
 
-# 글로벌 인스턴스
-translation_manager = TranslationManager(default_language=detect_system_language())
+translation_manager = TranslationManager(default_language=default_language)
 
 # 간편한 접근을 위한 헬퍼 함수
 def _(key: str, **kwargs) -> str:

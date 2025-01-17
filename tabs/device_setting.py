@@ -35,7 +35,8 @@ def set_device(selection):
     return gr.update(value=device_info_message), device
 
 def create_device_setting_tab(default_device)->Tuple[gr.Tab, gr.Dropdown]:
-    with gr.Tab("장치 설정"):
+    device_setting=gr.Tab("장치 설정")
+    with device_setting:
         device_dropdown = gr.Dropdown(
             label="사용할 장치 선택",
             choices=["Auto (Recommended)", "CPU", "GPU"],
@@ -54,3 +55,5 @@ def create_device_setting_tab(default_device)->Tuple[gr.Tab, gr.Dropdown]:
             outputs=[device_info, gr.State(default_device)],
             queue=False
         )
+        
+    return device_setting, device_dropdown

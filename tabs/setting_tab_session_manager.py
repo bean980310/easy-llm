@@ -5,7 +5,8 @@ from tabs.main_tab import MainTab
 main_tab=MainTab()
 
 def create_session_management_tab(session_id_state, history_state, session_select_dropdown, system_message_box, chatbot)-> Tuple[gr.Tab, gr.Dropdown, gr.Textbox]:
-    with gr.Tab("세션 관리"):
+    setting_session_management_tab = gr.Tab("세션 관리")
+    with setting_session_management_tab:
         gr.Markdown("### 세션 관리")
         with gr.Row():
             refresh_sessions_btn = gr.Button("세션 목록 갱신")
@@ -128,3 +129,5 @@ def create_session_management_tab(session_id_state, history_state, session_selec
             outputs=[session_manage_info, delete_session_confirm_row],
             queue=False
         )
+    
+    return setting_session_management_tab, existing_sessions_dropdown, current_session_display

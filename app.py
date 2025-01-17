@@ -20,8 +20,10 @@ from common.database import (
     insert_default_presets)
 from common.models import default_device
 from common.cache import models_cache
-from common.translations import translation_manager, _, detect_system_language
+from common.translations import translation_manager, _, TranslationManager
 from common.persona_speech_manager import PersonaSpeechManager
+from common.args import parse_args
+from common.default_language import default_language
 
 from tabs.main_tab import (
     api_models, 
@@ -73,9 +75,8 @@ rotating_file_handler = RotatingFileHandler(
 rotating_file_handler.setFormatter(formatter)
 logger.addHandler(rotating_file_handler)
 
-default_language = detect_system_language()
 
-# translation_manager = TranslationManager(default_language)
+args=parse_args()
 
 main_tab=MainTab()
 
@@ -255,55 +256,6 @@ def on_character_and_language_select(character_name, language):
         logger.error(f"Character setting error: {ve}")
         return "시스템 메시지 로딩 중 오류가 발생했습니다."
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Easy-LLM Application Setting")
-    
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=7861,
-        help="Gradio 서버가 실행될 포트 번호를 지정합니다. (default: %(default)d)"
-    )
-    
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="모델의 예측을 재현 가능하게 하기 위한 시드 값을 지정합니다. (default: %(default)d)"
-    )
-    
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="디버깅 모드를 활성화합니다. (default: %(default)s)"
-    )
-    
-    parser.add_argument(
-        "--inbrowser",
-        type=bool,
-        default=True,
-        help="Gradio 앱을 브라우저에서 실행합니다. (default: %(default)s)"
-    )
-    
-    parser.add_argument(
-        "--share",
-        action="store_true",
-        help="gradio 앱의 공유 링크를 생성합니다."
-    )
-    
-    parser.add_argument(
-        "--language",
-        type=str,
-        default=default_language,
-        choices=["ko", "ja", "en", "zh_CN", "zh_TW"],
-        help="애플리케이션의 기본 언어를 지정합니다. (default: %(default)s)"
-    )
-    
-    return parser.parse_args()
-
-
-args=parse_args()
-
 refresh_session_list=main_tab.refresh_sessions()
 
 with gr.Blocks(css=css) as demo:
@@ -333,7 +285,6 @@ with gr.Blocks(css=css) as demo:
         with gr.Row(elem_classes="header-container"):
             with gr.Column(scale=3):
                 title = gr.Markdown(f"## {_('main_title')}", elem_classes="title")
-                session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
             with gr.Column(scale=1):
                 settings_button = gr.Button("⚙️ Settings", elem_classes="settings-button")
                 language_dropdown = gr.Dropdown(
@@ -422,14 +373,15 @@ with gr.Blocks(css=css) as demo:
                     elem_classes="profile-image"
                 )
                 character_dropdown = gr.Dropdown(
-                    label="캐릭터 선택",
+                    label=_('character_select_label'),
                     choices=list(characters.keys()),
                     value=list(characters.keys())[0],
                     interactive=True,
-                    info="대화할 캐릭터를 선택하세요.",
+                    info=_('character_select_info'),
                     elem_classes='profile-image'
                 )
-                with gr.Accordion("고급 설정", open=False):
+                advanced_setting=gr.Accordion(_("advanced_setting"), open=False)
+                with advanced_setting:
                     seed_input = gr.Number(
                         label=_("seed_label"),
                         value=42,
@@ -468,6 +420,7 @@ with gr.Blocks(css=css) as demo:
         with gr.Row(elem_classes="status-bar"):
             status_text = gr.Markdown("Ready", elem_id="status_text")
             image_info = gr.Markdown("", visible=False)
+            session_select_info = gr.Markdown(_('select_session_info'))
             # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
             with gr.Row(visible=False) as reset_confirm_row:
                 reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
@@ -598,6 +551,7 @@ with gr.Blocks(css=css) as demo:
 
             return [
                 gr.update(value=f"## {_('main_title')}"),
+                gr.update(value=_('select_session_info')),
                 gr.update(label=_('language_select'),
                 info=_('language_info')),
                 gr.update(
@@ -607,6 +561,7 @@ with gr.Blocks(css=css) as demo:
                 ),
                 gr.update(label=_("model_type_label")),
                 gr.update(label=_("model_select_label")),
+                gr.update(label=_('character_select_label'), info=_('character_select_info')),
                 gr.update(label=_("api_key_label")),
                 gr.update(label=_("image_upload_label")),
                 gr.update(
@@ -614,6 +569,7 @@ with gr.Blocks(css=css) as demo:
                     placeholder=_("message_placeholder")
                 ),
                 gr.update(value=_("send_button")),
+                gr.update(value=_("advanced_setting")),
                 gr.update(label=_("seed_label"), info=_("seed_info")),
                 gr.update(value=_("reset_session_button")),
                 gr.update(value=_("reset_all_sessions_button")),
@@ -628,19 +584,23 @@ with gr.Blocks(css=css) as demo:
         inputs=[language_dropdown, character_dropdown],
         outputs=[
             title,
+            session_select_info,
             language_dropdown,
             system_message_box,
             model_type_dropdown,
             model_dropdown,
+            character_dropdown,
             api_key_text,
             image_input,
             msg,
             send_btn,
+            advanced_setting,
             seed_input,
             reset_btn,
             reset_all_btn,
         ]
     )
+    
         # 메시지 전송 시 함수 연결
     msg.submit(
         fn=main_tab.process_message,
@@ -831,7 +791,7 @@ with gr.Blocks(css=css) as demo:
                     )                        
                     create_save_history_tab(history_state)
                     create_load_history_tab(history_state)
-                    session_tab, existing_sessions_dropdown, current_session_display=create_session_management_tab(session_id_state, history_state, session_select_dropdown, system_message_box, chatbot)
+                    setting_session_management_tab, existing_sessions_dropdown, current_session_display=create_session_management_tab(session_id_state, history_state, session_select_dropdown, system_message_box, chatbot)
                     device_tab, device_dropdown=create_device_setting_tab(default_device)
                     
             create_sd_prompt_generator_tab()
@@ -947,6 +907,5 @@ with gr.Blocks(css=css) as demo:
 if __name__=="__main__":
     
     initialize_app()
-    translation_manager.current_language=args.language
-    
+
     demo.queue().launch(debug=args.debug, share=args.share, inbrowser=args.inbrowser, server_port=args.port, width=800)
