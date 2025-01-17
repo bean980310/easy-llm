@@ -4,7 +4,7 @@ import torch
 import logging
 import traceback
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from utils import get_terminators, make_local_dir_name
+from common.utils import get_terminators, make_local_dir_name
 
 logger = logging.getLogger(__name__)
 

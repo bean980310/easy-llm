@@ -3,7 +3,7 @@ import platform
 import logging
 import gradio as gr
 
-from models import get_default_device
+from common.models import get_default_device
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

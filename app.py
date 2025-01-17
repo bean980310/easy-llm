@@ -8,14 +8,13 @@ import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
 import json
-import secrets
 import sqlite3
-from utils import (
+from common.utils import (
     get_all_local_models,  # 수정된 함수
     convert_and_save,
     clear_all_model_cache
 )
-from database import (
+from common.database import (
     initialize_database,
     add_system_preset,
     delete_system_preset,
@@ -30,12 +29,13 @@ from database import (
     handle_delete_preset, 
     get_preset_choices,
     insert_default_presets)
-from models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
-from cache import models_cache
-from translations import translation_manager, _, detect_system_language, TranslationManager
-from persona_speech_manager import PersonaSpeechManager
+from common.models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
+from common.cache import models_cache
+from common.translations import translation_manager, _, detect_system_language
+from common.persona_speech_manager import PersonaSpeechManager
+from common.ui_components import create_shared_model_dropdown, create_shared_lauguage_dropdown
 
-from src.main_tab import (
+from tabs.main_tab import (
     api_models, 
     transformers_local, 
     gguf_local, 
@@ -46,14 +46,17 @@ from src.main_tab import (
     get_speech_manager,
     update_system_message_and_profile,
 )
-from src.download_tab import create_download_tab
-from src.setting_tab_preset import on_add_preset_click, apply_preset
-from src.device_setting import set_device
+
+from tabs.cache_tab import create_cache_tab
+from tabs.download_tab import create_download_tab
+from tabs.util_tab import create_util_tab
+from tabs.setting_tab_preset import create_system_preset_management_tab
+from tabs.device_setting import set_device
 
 from presets import __all__ as preset_modules
 import json
 
-from css import css
+from common.css import css
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -372,10 +375,10 @@ with gr.Blocks(css=css) as demo:
                 )
             with gr.Column(scale=10):
                 model_dropdown = gr.Dropdown(
-                label=_("model_select_label"),
-                choices=initial_choices,
-                value=initial_choices[0] if len(initial_choices) > 0 else None,
-                elem_classes="model-dropdown"
+                    label=_("model_select_label"),
+                    choices=initial_choices,
+                    value=initial_choices[0] if len(initial_choices) > 0 else None,
+                    elem_classes="model-dropdown"
                 )
                 api_key_text = gr.Textbox(
                     label=_("api_key_label"),
@@ -468,19 +471,20 @@ with gr.Blocks(css=css) as demo:
                         variant="secondary",
                         scale=1
                     )
-                    # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
-                    with gr.Row(visible=False) as reset_confirm_row:
-                        reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
-                        reset_yes_btn = gr.Button("✅ 예", variant="danger")
-                        reset_no_btn = gr.Button("❌ 아니요", variant="secondary")
-
-                    with gr.Row(visible=False) as reset_all_confirm_row:
-                        reset_all_confirm_msg = gr.Markdown("⚠️ **정말로 모든 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
-                        reset_all_yes_btn = gr.Button("✅ 예", variant="danger")
-                        reset_all_no_btn = gr.Button("❌ 아니요", variant="secondary")
+                    
         with gr.Row(elem_classes="status-bar"):
             status_text = gr.Markdown("Ready", elem_id="status_text")
             image_info = gr.Markdown("", visible=False)
+            # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
+            with gr.Row(visible=False) as reset_confirm_row:
+                reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                reset_yes_btn = gr.Button("✅ 예", variant="danger")
+                reset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+
+            with gr.Row(visible=False) as reset_all_confirm_row:
+                reset_all_confirm_msg = gr.Markdown("⚠️ **정말로 모든 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                reset_all_yes_btn = gr.Button("✅ 예", variant="danger")
+                reset_all_no_btn = gr.Button("❌ 아니요", variant="secondary")
 
     # 아래는 변경 이벤트 등록
     def apply_session_immediately(chosen_sid):
@@ -802,95 +806,8 @@ with gr.Blocks(css=css) as demo:
         
             
     create_download_tab()
-        
-    with gr.Tab(_("cache_tab_title")):
-        with gr.Row():
-            with gr.Column():
-                refresh_button = gr.Button(_("refresh_model_list_button"))
-                refresh_info = gr.Textbox(label=_("refresh_info_label"), interactive=False)
-            with gr.Column():
-                clear_all_btn = gr.Button(_("cache_clear_all_button"))
-                clear_all_result = gr.Textbox(label=_("clear_all_result_label"), interactive=False)
-
-        def refresh_model_list():
-            """
-            수동 새로고침 시 호출되는 함수.
-            - 새로 scan_local_models()
-            - DropDown 모델 목록 업데이트
-            """
-            # 새로 스캔
-            new_local_models = get_all_local_models()
-            # 새 choices: API 모델 + 로컬 모델 + 사용자 지정 모델 경로 변경
-            api_models = [
-                "gpt-3.5-turbo",
-                "gpt-4o-mini",
-                "gpt-4o"
-                # 필요 시 추가
-            ]
-            local_models = new_local_models["transformers"] + new_local_models["gguf"] + new_local_models["mlx"]
-            new_choices = api_models + local_models
-            new_choices = list(dict.fromkeys(new_choices))
-            new_choices = sorted(new_choices)  # 정렬 추가
-            # 반환값:
-            logger.info(_("refresh_model_list_button"))
-            return gr.update(choices=new_choices), "모델 목록을 새로고침 했습니다."
-            
-        refresh_button.click(
-            fn=refresh_model_list,
-            inputs=[],
-            outputs=[model_dropdown, refresh_info]
-        )
-        clear_all_btn.click(
-            fn=clear_all_model_cache,
-            inputs=[],
-            outputs=clear_all_result
-        )
-        
-        def change_language(selected_lang: str):
-            """언어 변경 처리 함수"""
-            lang_map = {
-                "한국어": "ko",
-                "日本語": "ja",
-                "中文(简体)": "zh_CN",
-                "中文(繁體)": "zh_TW",
-                "English": "en"
-            }
-            lang_code = lang_map.get(selected_lang, "ko")
-            translation_manager.set_language(lang_code)
-            
-            return [
-                gr.update(value=_("refresh_model_list_button")),
-                gr.update(label=_("refresh_info_label")),
-                gr.update(value=_("cache_clear_all_button")),
-                gr.update(label=_("clear_all_result_label"))
-            ]
-
-        language_dropdown.change(
-            fn=change_language,
-            inputs=[language_dropdown],
-            outputs=[
-                refresh_button,
-                refresh_info,
-                clear_all_btn,
-                clear_all_result
-            ]
-        )
-    with gr.Tab("유틸리티"):
-        gr.Markdown("### 모델 비트 변환기")
-        gr.Markdown("Transformers와 BitsAndBytes를 사용하여 모델을 8비트로 변환합니다.")
-        
-        with gr.Row():
-            model_id = gr.Textbox(label="HuggingFace 모델 ID", placeholder="예: gpt2")
-            output_dir = gr.Textbox(label="저장 디렉토리", placeholder="./converted_models/gpt2_8bit")
-        with gr.Row():
-            quant_type = gr.Radio(choices=["float8", "int8", "int4"], label="변환 유형", value="int8")
-        with gr.Row():
-            push_to_hub = gr.Checkbox(label="Hugging Face Hub에 푸시", value=False)
-        
-        convert_button = gr.Button("모델 변환 시작")
-        output = gr.Textbox(label="결과")
-        
-        convert_button.click(fn=convert_and_save, inputs=[model_id, output_dir, push_to_hub, quant_type], outputs=output)
+    create_cache_tab(model_dropdown, language_dropdown)
+    create_util_tab()
         
     with gr.Tab("설정"):
         gr.Markdown("### 설정")
@@ -916,53 +833,15 @@ with gr.Blocks(css=css) as demo:
 
             # 시스템 메시지 프리셋 관리 섹션 추가
             with gr.Tab("시스템 메시지 프리셋 관리"):
-                with gr.Row():
-                    preset_dropdown = gr.Dropdown(
-                        label="프리셋 선택",  # 필요 시 번역 키로 변경
-                        choices=get_preset_choices(default_language),
-                        value=get_preset_choices(default_language)[0] if get_preset_choices(default_language) else None
-                    )
-                    refresh_preset_button = gr.Button("프리셋 목록 갱신")
-                    refresh_preset_button.click(
-                        fn=main_tab.refresh_preset_list,
-                        inputs=[selected_language_state],
-                        outputs=[preset_dropdown]
-                    )
-                    apply_preset_btn = gr.Button("프리셋 적용")
-            
-                with gr.Row():
-                    preset_name = gr.Textbox(
-                        label="새 프리셋 이름",
-                        placeholder="예: 친절한 비서",
-                        interactive=True
-                    )
-                    preset_content = gr.Textbox(
-                        label="프리셋 내용",
-                        placeholder="프리셋으로 사용할 시스템 메시지를 입력하세요.",
-                        lines=4,
-                        interactive=True
-                    )
-            
-                with gr.Row():
-                    add_preset_btn = gr.Button("프리셋 추가", variant="primary")
-                    delete_preset_btn = gr.Button("프리셋 삭제", variant="secondary")
-            
-                preset_info = gr.Textbox(
-                    label="프리셋 관리 결과",
-                    interactive=False
+                create_system_preset_management_tab(
+                    default_language=default_language,
+                    session_id_state=session_id_state,
+                    history_state=history_state,
+                    selected_language_state=selected_language_state,
+                    system_message_box=system_message_box,
+                    profile_image=profile_image,
+                    chatbot=chatbot
                 )
-            
-                # 덮어쓰기 확인을 위한 컴포넌트 추가 (처음에는 숨김)
-                with gr.Row():
-                    confirm_overwrite_btn = gr.Button("확인", variant="primary", visible=False)
-                    cancel_overwrite_btn = gr.Button("취소", variant="secondary", visible=False)
-            
-                overwrite_message = gr.Textbox(
-                    label="덮어쓰기 메시지",
-                    value="",
-                    interactive=False
-                )
-            
                 # 프리셋 Dropdown 초기화
                 demo.load(
                     fn=main_tab.initial_load_presets,
@@ -971,94 +850,6 @@ with gr.Blocks(css=css) as demo:
                     queue=False
                 )
                 
-                add_preset_btn.click(
-                    fn=on_add_preset_click,
-                    inputs=[preset_name, preset_content],
-                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-                )
-            
-                # 덮어쓰기 확인 버튼 클릭 시
-                def confirm_overwrite(name, content):
-                    success, message = handle_add_preset(name.strip(), content.strip(), overwrite=True)
-                    if success:
-                        return message, gr.update(visible=False), gr.update(visible=False), ""
-                    else:
-                        return message, gr.update(visible=False), gr.update(visible=False), ""
-                
-                confirm_overwrite_btn.click(
-                    fn=confirm_overwrite,
-                    inputs=[preset_name, preset_content],
-                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-                )
-            
-                # 덮어쓰기 취소 버튼 클릭 시
-                def cancel_overwrite():
-                    return "❌ 덮어쓰기가 취소되었습니다.", gr.update(visible=False), gr.update(visible=False), ""
-                
-                cancel_overwrite_btn.click(
-                    fn=cancel_overwrite,
-                    inputs=[],
-                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-                )
-            
-                # 프리셋 삭제 버튼 클릭 시
-                def on_delete_preset_click(name):
-                    if not name:
-                        return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                    confirmation_msg = f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?"
-                    return confirmation_msg, gr.update(visible=True), gr.update(choices=get_preset_choices(default_language))
-                
-                
-                # 삭제 확인 버튼 추가
-                delete_confirm_btn = gr.Button("삭제 확인", variant="danger", visible=False)
-                delete_cancel_btn = gr.Button("삭제 취소", variant="secondary", visible=False)
-                delete_preset_info = gr.Textbox(label="프리셋 삭제 결과", interactive=False)
-                
-                with gr.Row(visible=False) as delete_preset_confirm_row:
-                    delete_preset_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 프리셋을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
-                    delete_preset_yes_btn = gr.Button("✅ 예", variant="danger")
-                    delete_preset_no_btn = gr.Button("❌ 아니요", variant="secondary")
-                
-                # 프리셋 삭제 확인 버튼 클릭 시 실제 삭제 수행
-                def confirm_delete_preset(name, confirm):
-                    if confirm:
-                        success, message = handle_delete_preset(name, default_language)
-                        if success:
-                            return message, gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                        else:
-                            return f"❌ {message}", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                    else:
-                        return "❌ 삭제가 취소되었습니다.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                    
-                # 프리셋 삭제 버튼과 확인 버튼의 상호작용 연결
-                delete_preset_btn.click(
-                    fn=lambda : (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-                    inputs=[preset_dropdown],
-                    outputs=[delete_preset_confirm_row, delete_preset_yes_btn, delete_preset_no_btn]
-                )
-                
-                delete_preset_yes_btn.click(
-                    fn=confirm_delete_preset,
-                    inputs=[preset_dropdown, gr.State(True)],  # confirm=True
-                    outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
-                )
-
-                # 프리셋 삭제 취소 버튼 클릭 시
-                delete_preset_no_btn.click(
-                    fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False), preset_dropdown),
-                    inputs=[],
-                    outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
-                )
-            
-                apply_preset_btn.click(
-                    fn=apply_preset,
-                    inputs=[preset_dropdown, session_id_state, history_state, selected_language_state],
-                    outputs=[preset_info, history_state, system_message_box, profile_image]
-                ).then(
-                    fn=main_tab.filter_messages_for_chatbot,
-                    inputs=[history_state],
-                    outputs=chatbot
-                )
             # 채팅 기록 저장 섹션
             with gr.Tab("채팅 기록 저장"):
                 save_button = gr.Button("채팅 기록 저장", variant="secondary")

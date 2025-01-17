@@ -1,7 +1,7 @@
 import logging
 import traceback
 import os
-from utils import make_local_dir_name
+from common.utils import make_local_dir_name
 
 from mlx_vlm import load, generate
 from mlx_vlm.prompt_utils import apply_chat_template

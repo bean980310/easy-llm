@@ -5,11 +5,11 @@ import traceback
 import gradio as gr
 from huggingface_hub import HfApi
 
-from src.main_tab import MainTab
-from src.api_models import api_models
-from src.known_hf_models import known_hf_models
+from tabs.main_tab import MainTab
+from common.api_models import api_models
+from common.known_hf_models import known_hf_models
 
-from utils import download_model_from_hf, make_local_dir_name, get_all_local_models
+from common.utils import download_model_from_hf, make_local_dir_name, get_all_local_models
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

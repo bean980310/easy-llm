@@ -4,24 +4,20 @@ import os
 import secrets
 import sqlite3
 
-from models import get_all_local_models, generate_answer
-from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
-from translations import detect_system_language, TranslationManager, translation_manager
+from common.models import get_all_local_models, generate_answer
+from common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
+from common.translations import detect_system_language, TranslationManager, translation_manager
 
-from src.preset_images import PRESET_IMAGES
-from src.api_models import api_models
+from common.preset_images import PRESET_IMAGES
+from common.api_models import api_models
+from common.local_models import transformers_local, gguf_local, mlx_local
 
 import traceback
-from persona_speech_manager import PersonaSpeechManager
+from common.persona_speech_manager import PersonaSpeechManager
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-local_models_data = get_all_local_models()
-transformers_local = local_models_data["transformers"]
-gguf_local = local_models_data["gguf"]
-mlx_local = local_models_data["mlx"]
     
 generator_choices = api_models + transformers_local + gguf_local + mlx_local + ["사용자 지정 모델 경로 변경"]
 generator_choices = list(dict.fromkeys(generator_choices))  # 중복 제거
