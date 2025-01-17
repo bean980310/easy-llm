@@ -1,7 +1,7 @@
 # persona_speech_manager.py
 import logging
 from typing import Dict
-from common.database import load_system_presets
+from src.common.database import load_system_presets
 import sqlite3
 
 import re

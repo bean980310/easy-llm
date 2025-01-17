@@ -8,7 +8,7 @@ from pathlib import Path
 import logging
 from presets import MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
 
-from common.default_language import default_language
+from src.common.default_language import default_language
 
 logger = logging.getLogger(__name__)
 

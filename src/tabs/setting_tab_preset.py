@@ -1,9 +1,9 @@
 import gradio as gr
-from common.database import preset_exists, handle_add_preset, load_system_presets, save_chat_history_db, get_preset_choices, handle_delete_preset
-from tabs.main_tab import MainTab
+from src.common.database import preset_exists, handle_add_preset, load_system_presets, save_chat_history_db, get_preset_choices, handle_delete_preset
+from src.tabs.main_tab import MainTab
 import logging
 
-from common.preset_images import PRESET_IMAGES
+from src.common.preset_images import PRESET_IMAGES
 
 main_tab=MainTab()
 

@@ -18,7 +18,7 @@ from llama_cpp import Llama
 from model_converter import convert_model_to_float8, convert_model_to_int8, convert_model_to_int4
 import platform
 import gc
-from common.cache import models_cache
+from src.common.cache import models_cache
 logger = logging.getLogger(__name__)
 
 LOCAL_MODELS_ROOT = "./models"

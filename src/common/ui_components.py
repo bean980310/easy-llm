@@ -1,8 +1,8 @@
 import gradio as gr
-from common.translations import _, translation_manager, detect_system_language
-from common.state import shared_state
-from common.local_models import transformers_local, gguf_local, mlx_local
-from common.api_models import api_models
+from src.common.translations import _, translation_manager, detect_system_language
+from src.common.state import shared_state
+from src.common.local_models import transformers_local, gguf_local, mlx_local
+from src.common.api_models import api_models
 
 default_language = detect_system_language()
 

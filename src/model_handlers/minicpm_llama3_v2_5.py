@@ -5,7 +5,7 @@ from transformers import AutoTokenizer, AutoModel, ProcessorMixin
 import traceback
 import logging
 from PIL import Image
-from common.utils import make_local_dir_name
+from src.common.utils import make_local_dir_name
 
 logger = logging.getLogger(__name__)
 

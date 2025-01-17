@@ -4,18 +4,18 @@ import os
 import secrets
 import sqlite3
 
-from common.models import get_all_local_models, generate_answer
-from common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
-from common.translations import TranslationManager, translation_manager
+from src.common.models import get_all_local_models, generate_answer
+from src.common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
+from src.common.translations import TranslationManager, translation_manager
 
-from common.preset_images import PRESET_IMAGES
-from common.api_models import api_models
-from common.local_models import transformers_local, gguf_local, mlx_local
-from common.default_language import default_language
+from src.common.preset_images import PRESET_IMAGES
+from src.common.api_models import api_models
+from src.common.local_models import transformers_local, gguf_local, mlx_local
+from src.common.default_language import default_language
 
 import traceback
-from common.persona_speech_manager import PersonaSpeechManager
-from common.args import parse_args
+from src.common.persona_speech_manager import PersonaSpeechManager
+from src.common.args import parse_args
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

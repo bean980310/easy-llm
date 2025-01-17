@@ -1,7 +1,7 @@
 import logging
 import traceback
 import os
-from common.utils import make_local_dir_name
+from src.common.utils import make_local_dir_name
 
 from mlx_lm import load, generate
 

@@ -1,5 +1,5 @@
 import argparse
-from common.detect_language import detect_system_language
+from src.common.detect_language import detect_system_language
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Easy-LLM Application Setting")

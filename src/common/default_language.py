@@ -1,5 +1,5 @@
-from common.args import parse_args
-from common.detect_language import detect_system_language
+from src.common.args import parse_args
+from src.common.detect_language import detect_system_language
 
 args=parse_args()
 

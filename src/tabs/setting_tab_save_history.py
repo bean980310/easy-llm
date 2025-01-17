@@ -1,5 +1,5 @@
 import gradio as gr
-from common.database import save_chat_history_db, save_chat_history_csv, save_chat_button_click
+from src.common.database import save_chat_history_db, save_chat_history_csv, save_chat_button_click
 
 def create_save_history_tab(history_state):
     with gr.Tab("채팅 기록 저장"):

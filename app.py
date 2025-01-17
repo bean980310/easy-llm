@@ -8,7 +8,7 @@ import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
 import sqlite3
-from common.database import (
+from src.common.database import (
     initialize_database,
     add_system_preset,
     delete_system_preset,
@@ -18,14 +18,14 @@ from common.database import (
     get_existing_sessions, 
     get_preset_choices,
     insert_default_presets)
-from common.models import default_device
-from common.cache import models_cache
-from common.translations import translation_manager, _, TranslationManager
-from common.persona_speech_manager import PersonaSpeechManager
-from common.args import parse_args
-from common.default_language import default_language
+from src.common.models import default_device
+from src.common.cache import models_cache
+from src.common.translations import translation_manager, _, TranslationManager
+from src.common.persona_speech_manager import PersonaSpeechManager
+from src.common.args import parse_args
+from src.common.default_language import default_language
 
-from tabs.main_tab import (
+from src.tabs.main_tab import (
     api_models, 
     transformers_local, 
     gguf_local, 
@@ -36,21 +36,21 @@ from tabs.main_tab import (
     update_system_message_and_profile,
 )
 
-from tabs.cache_tab import create_cache_tab
-from tabs.download_tab import create_download_tab
-from tabs.util_tab import create_util_tab
-from tabs.setting_tab_custom_model import create_custom_model_tab
-from tabs.setting_tab_preset import create_system_preset_management_tab
-from tabs.setting_tab_save_history import create_save_history_tab
-from tabs.setting_tab_load_history import create_load_history_tab
-from tabs.setting_tab_session_manager import create_session_management_tab
-from tabs.device_setting import set_device, create_device_setting_tab
-from tabs.sd_prompt_generator_tab import create_sd_prompt_generator_tab
+from src.tabs.cache_tab import create_cache_tab
+from src.tabs.download_tab import create_download_tab
+from src.tabs.util_tab import create_util_tab
+from src.tabs.setting_tab_custom_model import create_custom_model_tab
+from src.tabs.setting_tab_preset import create_system_preset_management_tab
+from src.tabs.setting_tab_save_history import create_save_history_tab
+from src.tabs.setting_tab_load_history import create_load_history_tab
+from src.tabs.setting_tab_session_manager import create_session_management_tab
+from src.tabs.device_setting import set_device, create_device_setting_tab
+from src.tabs.sd_prompt_generator_tab import create_sd_prompt_generator_tab
 
 from presets import __all__ as preset_modules
 import json
 
-from common.css import css
+from src.common.css import css
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
