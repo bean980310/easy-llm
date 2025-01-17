@@ -9,11 +9,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 import sqlite3
-from common.utils import (
-    get_all_local_models,  # 수정된 함수
-    convert_and_save,
-    clear_all_model_cache
-)
 from common.database import (
     initialize_database,
     add_system_preset,
@@ -25,15 +20,12 @@ from common.database import (
     save_chat_button_click, 
     save_chat_history_csv, 
     save_chat_history_db, 
-    handle_add_preset, 
-    handle_delete_preset, 
     get_preset_choices,
     insert_default_presets)
-from common.models import default_device, get_all_local_models, generate_stable_diffusion_prompt_cached
+from common.models import default_device, generate_stable_diffusion_prompt_cached
 from common.cache import models_cache
 from common.translations import translation_manager, _, detect_system_language
 from common.persona_speech_manager import PersonaSpeechManager
-from common.ui_components import create_shared_model_dropdown, create_shared_lauguage_dropdown
 
 from tabs.main_tab import (
     api_models, 
