@@ -53,6 +53,8 @@ from src.device_setting import set_device
 from presets import __all__ as preset_modules
 import json
 
+from css import css
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -309,7 +311,7 @@ args=parse_args()
 
 refresh_session_list=main_tab.refresh_sessions()
 
-with gr.Blocks(css="style.css") as demo:
+with gr.Blocks(css=css) as demo:
     speech_manager_state = gr.State(initialize_speech_manager)
     
     session_id, loaded_history, session_dropdown, session_label=on_app_start()
@@ -328,119 +330,91 @@ with gr.Blocks(css="style.css") as demo:
     reset_confirmation = gr.State(False)
     reset_all_confirmation = gr.State(False)
     
-    title=gr.Markdown(f"## {_('main_title')}")
-    language_dropdown = gr.Dropdown(
-        label=_('language_select'),
-        choices=["한국어", "日本語", "中文(简体)", "中文(繁體)", "English"],
-        value=translation_manager.get_language_display_name(default_language),
-        interactive=True,
-        info=_('language_info')
-    )
+    initial_choices = api_models + transformers_local + gguf_local + mlx_local
+    initial_choices = list(dict.fromkeys(initial_choices))
+    initial_choices = sorted(initial_choices)  # 정렬 추가
     
-    system_message_box = gr.Textbox(
-        label=_("system_message"),
-        value=_("system_message_default"),
-        placeholder=_("system_message_placeholder")
-    )
-    
-    character_dropdown = gr.Dropdown(
-        label="캐릭터 선택",
-        choices=list(characters.keys()),
-        value=list(characters.keys())[0],
-        interactive=True,
-        info="대화할 캐릭터를 선택하세요."
-    )
-    
-    with gr.Tab(_("tab_main")):
-        initial_choices = api_models + transformers_local + gguf_local + mlx_local
-        initial_choices = list(dict.fromkeys(initial_choices))
-        initial_choices = sorted(initial_choices)  # 정렬 추가
-        with gr.Row():
-            # (예시) "세션 선택" Dropdown 추가
+    with gr.Column(elem_classes="container"):
+        with gr.Row(elem_classes="header-container"):
+            with gr.Column(scale=3):
+                title = gr.Markdown(f"## {_('main_title')}", elem_classes="title")
+                session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
+            with gr.Column(scale=1):
+                language_dropdown = gr.Dropdown(
+                    label=_('language_select'),
+                    choices=["한국어", "日本語", "中文(简体)", "中文(繁體)", "English"],
+                    value=translation_manager.get_language_display_name(default_language),
+                    interactive=True,
+                    info=_('language_info'),
+                    container=False,
+                    elem_classes="custom-dropdown"
+                )
+        with gr.Row(elem_classes="session-container"):
             session_select_dropdown = gr.Dropdown(
                 label="세션 선택",
                 choices=[],  # 앱 시작 시 혹은 별도의 로직으로 세션 목록을 채움
                 value=None,
-                interactive=True
+                interactive=True,
+                container=False,
+                scale=8,
+                elem_classes="session-dropdown"
             )
-            with gr.Column():
-                add_session_icon_btn = gr.Button("📝", elem_id="add_session_btn", scale=1, variant="secondary")
-                delete_session_icon_btn = gr.Button("🗑️", elem_id="delete_session_btn", scale=1, variant="stop")
-            session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
-
-        with gr.Row():
-            model_type_dropdown = gr.Radio(
-                label=_("model_type_label"),
-                choices=["all", "transformers", "gguf", "mlx"],
-                value="all",
-            )
+            add_session_icon_btn = gr.Button("📝", elem_classes="icon-button", scale=1, variant="secondary")
+            delete_session_icon_btn = gr.Button("🗑️", elem_classes="icon-button-delete", scale=1, variant="stop")
         
-        model_dropdown = gr.Dropdown(
-            label=_("model_select_label"),
-            choices=initial_choices,
-            value=initial_choices[0] if len(initial_choices) > 0 else None,
-        )
-        
-        api_key_text = gr.Textbox(
-            label=_("api_key_label"),
-            placeholder="sk-...",
-            visible=False  # 기본적으로 숨김
-        )
-        image_info = gr.Markdown("", visible=False)
-
-        # 아래는 변경 이벤트 등록
-        def apply_session_immediately(chosen_sid):
-            """
-            메인탭에서 세션이 선택되면 바로 main_tab.apply_session을 호출해 세션 적용.
-            """
-            return main_tab.apply_session(chosen_sid)
-
-        def init_session_dropdown(sessions):
-            if not sessions:
-                return gr.update(choices=[], value=None)
-            return gr.update(choices=sessions, value=sessions[0])
-        
-        def create_session():
-            # 실제로는 main_tab.create_new_session(...) 같은 함수 호출
-            new_sid, info = main_tab.create_new_session(system_message_box.value)
-            return new_sid, info
-        
-        add_session_icon_btn.click(
-            fn=create_session,
-            inputs=[],
-            outputs=[]  # 필요하다면 session_id_state, session_select_dropdown 등 갱신
-        ).then(
-            fn=main_tab.refresh_sessions,
-            inputs=[],
-            outputs=[session_select_dropdown]  # 세션 목록 즉시 갱신
-        )
-        
-        def delete_selected_session(chosen_sid):
-            # 선택된 세션을 삭제 (주의: None 또는 ""인 경우 처리)
-            result_msg, _, updated_dropdown = main_tab.delete_session(chosen_sid, "demo_session")
-            return result_msg, updated_dropdown
-        
-        delete_session_icon_btn.click(
-            fn=lambda: delete_selected_session(session_select_dropdown.value),
-            inputs=[],
-            outputs=[]  # 필요 시 Textbox나 Dropdown 업데이트
-        ).then(
-            fn=main_tab.refresh_sessions,
-            inputs=[],
-            outputs=[session_select_dropdown]
-        )
-        with gr.Column():
-            preset_dropdown = gr.Dropdown(
-                label="프리셋 선택",
-                choices=get_preset_choices(default_language),
-                value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
-                interactive=True
-            )
-            change_preset_button = gr.Button("프리셋 변경")
-
-            image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
-            with gr.Row():
-                chatbot = gr.Chatbot(height=400, label="Chatbot", type="messages")
+        with gr.Row(elem_classes="model-container"):
+            with gr.Column(scale=5):
+                model_type_dropdown = gr.Radio(
+                    label=_("model_type_label"),
+                    choices=["all", "transformers", "gguf", "mlx"],
+                    value="all",
+                    elem_classes="model-dropdown"
+                )
+            with gr.Column(scale=10):
+                model_dropdown = gr.Dropdown(
+                label=_("model_select_label"),
+                choices=initial_choices,
+                value=initial_choices[0] if len(initial_choices) > 0 else None,
+                elem_classes="model-dropdown"
+                )
+                api_key_text = gr.Textbox(
+                    label=_("api_key_label"),
+                    placeholder="sk-...",
+                    visible=False,
+                    elem_classes="api-key-input"
+                )
+        with gr.Row(elem_classes="chat-interface"):
+            with gr.Column(scale=7):
+                system_message_box = gr.Textbox(
+                    label=_("system_message"),
+                    value=_("system_message_default"),
+                    placeholder=_("system_message_placeholder"),
+                    elem_classes="system-message"
+                )
+                
+                chatbot = gr.Chatbot(
+                    height=400, 
+                    label="Chatbot", 
+                    type="messages", 
+                    elem_classes=["chat-messages"]
+                )
+                
+                with gr.Row(elem_classes="input-area"):
+                    msg = gr.Textbox(
+                    label=_("message_input_label"),
+                    placeholder=_("message_placeholder"),
+                    scale=9,
+                    show_label=False,
+                    elem_classes="message-input"
+                    )
+                    send_btn = gr.Button(
+                        value=_("send_button"),
+                        scale=1,
+                        variant="primary",
+                        elem_classes="send-button"
+                    )
+                    image_input = gr.Image(label=_("image_upload_label"), type="pil", visible=False)
+            with gr.Column(scale=3, elem_classes="side-panel"):
                 profile_image = gr.Image(
                     label=_('profile_image_label'),
                     visible=True,
@@ -448,339 +422,383 @@ with gr.Blocks(css="style.css") as demo:
                     show_label=True,
                     width=400,
                     height=400,
-                    value=characters[list(characters.keys())[0]]["profile_image"]
+                    value=characters[list(characters.keys())[0]]["profile_image"],
+                    elem_classes="profile-image"
                 )
-                
-            with gr.Row():
-                msg = gr.Textbox(
-                    label=_("message_input_label"),
-                    placeholder=_("message_placeholder"),
-                    scale=9
-                )
-                send_btn = gr.Button(
-                    value=_("send_button"),
-                    scale=1,
-                    variant="primary"
-                )
-            with gr.Row():
-                status_text = gr.Markdown("", elem_id="status_text")
-            with gr.Row():
-                seed_input = gr.Number(
-                    label=_("seed_label"),
-                    value=42,
-                    precision=0,
-                    step=1,
+                character_dropdown = gr.Dropdown(
+                    label="캐릭터 선택",
+                    choices=list(characters.keys()),
+                    value=list(characters.keys())[0],
                     interactive=True,
-                    info=_("seed_info")
+                    info="대화할 캐릭터를 선택하세요.",
+                    elem_classes='profile-image'
                 )
-                
-            with gr.Row():
-                character_conversation_dropdown = gr.CheckboxGroup(
-                    label="대화할 캐릭터 선택",
-                    choices=get_preset_choices(default_language),  # 추가 캐릭터 이름
-                    value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
-                    interactive=True
-                )
-                start_conversation_button = gr.Button("대화 시작")
+                with gr.Accordion("고급 설정", open=False):
+                    seed_input = gr.Number(
+                        label=_("seed_label"),
+                        value=42,
+                        precision=0,
+                        step=1,
+                        interactive=True,
+                        info=_("seed_info"),
+                        elem_classes="seed-input"
+                    )
+                    preset_dropdown = gr.Dropdown(
+                        label="프리셋 선택",
+                        choices=get_preset_choices(default_language),
+                        value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
+                        interactive=True,
+                        elem_classes="preset-dropdown"
+                    )
+                    change_preset_button = gr.Button("프리셋 변경")
+                    character_conversation_dropdown = gr.CheckboxGroup(
+                        label="대화할 캐릭터 선택",
+                        choices=get_preset_choices(default_language),  # 추가 캐릭터 이름
+                        value=list(get_preset_choices(default_language))[0] if get_preset_choices(default_language) else None,
+                        interactive=True
+                    )
+                    start_conversation_button = gr.Button("대화 시작")
+                    reset_btn = gr.Button(
+                        value=_("reset_session_button"),  # "세션 초기화"에 해당하는 번역 키
+                        variant="secondary",
+                        scale=1
+                    )
+                    reset_all_btn = gr.Button(
+                        value=_("reset_all_sessions_button"),  # "모든 세션 초기화"에 해당하는 번역 키
+                        variant="secondary",
+                        scale=1
+                    )
+                    # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
+                    with gr.Row(visible=False) as reset_confirm_row:
+                        reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                        reset_yes_btn = gr.Button("✅ 예", variant="danger")
+                        reset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+
+                    with gr.Row(visible=False) as reset_all_confirm_row:
+                        reset_all_confirm_msg = gr.Markdown("⚠️ **정말로 모든 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
+                        reset_all_yes_btn = gr.Button("✅ 예", variant="danger")
+                        reset_all_no_btn = gr.Button("❌ 아니요", variant="secondary")
+        with gr.Row(elem_classes="status-bar"):
+            status_text = gr.Markdown("Ready", elem_id="status_text")
+            image_info = gr.Markdown("", visible=False)
+
+    # 아래는 변경 이벤트 등록
+    def apply_session_immediately(chosen_sid):
+        """
+        메인탭에서 세션이 선택되면 바로 main_tab.apply_session을 호출해 세션 적용.
+        """
+        return main_tab.apply_session(chosen_sid)
+
+    def init_session_dropdown(sessions):
+        if not sessions:
+            return gr.update(choices=[], value=None)
+        return gr.update(choices=sessions, value=sessions[0])
+        
+    def create_session():
+        # 실제로는 main_tab.create_new_session(...) 같은 함수 호출
+        new_sid, info = main_tab.create_new_session(system_message_box.value)
+        return new_sid, info
+        
+    add_session_icon_btn.click(
+        fn=create_session,
+        inputs=[],
+        outputs=[]  # 필요하다면 session_id_state, session_select_dropdown 등 갱신
+    ).then(
+        fn=main_tab.refresh_sessions,
+        inputs=[],
+        outputs=[session_select_dropdown]  # 세션 목록 즉시 갱신
+    )
+        
+    def delete_selected_session(chosen_sid):
+        # 선택된 세션을 삭제 (주의: None 또는 ""인 경우 처리)
+        result_msg, _, updated_dropdown = main_tab.delete_session(chosen_sid, "demo_session")
+        return result_msg, updated_dropdown
+        
+    delete_session_icon_btn.click(
+        fn=lambda: delete_selected_session(session_select_dropdown.value),
+        inputs=[],
+        outputs=[]  # 필요 시 Textbox나 Dropdown 업데이트
+    ).then(
+        fn=main_tab.refresh_sessions,
+        inputs=[],
+        outputs=[session_select_dropdown]
+    )
                         
-            # 시드 입력과 상태 연결
-            seed_input.change(
-                fn=lambda seed: seed if seed is not None else 42,
-                inputs=[seed_input],
-                outputs=[seed_state]
-            )
+    # 시드 입력과 상태 연결
+    seed_input.change(
+        fn=lambda seed: seed if seed is not None else 42,
+        inputs=[seed_input],
+        outputs=[seed_state]
+    )
             
-            # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
-            change_preset_button.click(
-                fn=main_tab.handle_change_preset,
-                inputs=[preset_dropdown, history_state, selected_language_state],
-                outputs=[history_state, system_message_box, profile_image]
-            )
+    # 프리셋 변경 버튼 클릭 시 호출될 함수 연결
+    change_preset_button.click(
+        fn=main_tab.handle_change_preset,
+        inputs=[preset_dropdown, history_state, selected_language_state],
+        outputs=[history_state, system_message_box, profile_image]
+    )
             
-            character_dropdown.change(
-                fn=update_system_message_and_profile,
-                inputs=[character_dropdown, language_dropdown, speech_manager_state],
-                outputs=[system_message_box, profile_image]
-            )
-            
-            with gr.Row():
-                reset_btn = gr.Button(
-                    value=_("reset_session_button"),  # "세션 초기화"에 해당하는 번역 키
-                    variant="secondary",
-                    scale=1
-                )
-                reset_all_btn = gr.Button(
-                    value=_("reset_all_sessions_button"),  # "모든 세션 초기화"에 해당하는 번역 키
-                    variant="secondary",
-                    scale=1
-                )
-                
-            # 초기화 확인 메시지 및 버튼 추가 (숨김 상태로 시작)
-            with gr.Row(visible=False) as reset_confirm_row:
-                reset_confirm_msg = gr.Markdown("⚠️ **정말로 현재 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
-                reset_yes_btn = gr.Button("✅ 예", variant="danger")
-                reset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+    character_dropdown.change(
+        fn=update_system_message_and_profile,
+        inputs=[character_dropdown, language_dropdown, speech_manager_state],
+        outputs=[system_message_box, profile_image]
+    )
+        
+    # 모델 선택 변경 시 가시성 토글
+    model_dropdown.change(
+        fn=lambda selected_model: (
+            main_tab.toggle_api_key_visibility(selected_model),
+            main_tab.toggle_image_input_visibility(selected_model)
+        ),
+        inputs=[model_dropdown],
+        outputs=[api_key_text, image_input]
+    )
+        
+    model_type_dropdown.change(
+        fn=main_tab.update_model_list,
+        inputs=[model_type_dropdown],
+        outputs=[model_dropdown]
+    )
+        
+    bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
+        
+    def update_character_languages(selected_language, selected_character):
+        """
+        인터페이스 언어에 따라 선택된 캐릭터의 언어를 업데이트합니다.
+        """
+        speech_manager = get_speech_manager(session_id_state)
+        if selected_language in characters[selected_character]["languages"]:
+            # 인터페이스 언어가 캐릭터의 지원 언어에 포함되면 해당 언어로 설정
+            speech_manager.current_language = selected_language
+        else:
+            # 지원하지 않는 언어일 경우 기본 언어로 설정
+            speech_manager.current_language = characters[selected_character]["default_language"]
+        return gr.update()
 
-            with gr.Row(visible=False) as reset_all_confirm_row:
-                reset_all_confirm_msg = gr.Markdown("⚠️ **정말로 모든 세션을 초기화하시겠습니까? 모든 대화 기록이 삭제됩니다.**")
-                reset_all_yes_btn = gr.Button("✅ 예", variant="danger")
-                reset_all_no_btn = gr.Button("❌ 아니요", variant="secondary")
         
-        # 모델 선택 변경 시 가시성 토글
-        model_dropdown.change(
-            fn=lambda selected_model: (
-                main_tab.toggle_api_key_visibility(selected_model),
-                main_tab.toggle_image_input_visibility(selected_model)
-            ),
-            inputs=[model_dropdown],
-            outputs=[api_key_text, image_input]
-        )
-        
-        model_type_dropdown.change(
-            fn=main_tab.update_model_list,
-            inputs=[model_type_dropdown],
-            outputs=[model_dropdown]
-        )
-        
-        bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
-        
-        def update_character_languages(selected_language, selected_character):
-            """
-            인터페이스 언어에 따라 선택된 캐릭터의 언어를 업데이트합니다.
-            """
-            speech_manager = get_speech_manager(session_id_state)
-            if selected_language in characters[selected_character]["languages"]:
-                # 인터페이스 언어가 캐릭터의 지원 언어에 포함되면 해당 언어로 설정
-                speech_manager.current_language = selected_language
+    def change_language(selected_lang, selected_character):
+        """언어 변경 처리 함수"""
+        lang_map = {
+            "한국어": "ko",
+            "日本語": "ja",
+            "中文(简体)": "zh_CN",
+            "中文(繁體)": "zh_TW",
+            "English": "en"
+        }
+        lang_code = lang_map.get(selected_lang, "ko")
+        if translation_manager.set_language(lang_code):
+            if selected_lang in characters[selected_character]["languages"]:
+                speech_manager_state.current_language = selected_lang
             else:
-                # 지원하지 않는 언어일 경우 기본 언어로 설정
-                speech_manager.current_language = characters[selected_character]["default_language"]
-            return gr.update()
-
-        
-        def change_language(selected_lang, selected_character):
-            """언어 변경 처리 함수"""
-            lang_map = {
-                "한국어": "ko",
-                "日本語": "ja",
-                "中文(简体)": "zh_CN",
-                "中文(繁體)": "zh_TW",
-                "English": "en"
-            }
-            lang_code = lang_map.get(selected_lang, "ko")
-            if translation_manager.set_language(lang_code):
-                if selected_lang in characters[selected_character]["languages"]:
-                    speech_manager_state.current_language = selected_lang
-                else:
-                    speech_manager_state.current_language = characters[selected_character]["languages"][0]
-                system_presets = load_system_presets(lang_code)
+                speech_manager_state.current_language = characters[selected_character]["languages"][0]
+            system_presets = load_system_presets(lang_code)
                 
-                if len(system_presets) > 0:
-                    preset_name = list(system_presets.keys())[0]
-                    system_content = system_presets[preset_name]
-                else:
-                    system_content = _("system_message_default")
-
-                return [
-                    gr.update(value=f"## {_('main_title')}"),
-                    gr.update(label=_('language_select'),
-                    info=_('language_info')),
-                    gr.update(
-                        label=_("system_message"),
-                        value=_("system_message_default"),
-                        placeholder=_("system_message_placeholder")
-                    ),
-                    gr.update(label=_("model_type_label")),
-                    gr.update(label=_("model_select_label")),
-                    gr.update(label=_("api_key_label")),
-                    gr.update(label=_("image_upload_label")),
-                    gr.update(
-                        label=_("message_input_label"),
-                        placeholder=_("message_placeholder")
-                    ),
-                    gr.update(value=_("send_button")),
-                    gr.update(label=_("seed_label"), info=_("seed_info")),
-                    gr.update(value=_("reset_session_button")),
-                    gr.update(value=_("reset_all_sessions_button")),
-                ]
+            if len(system_presets) > 0:
+                preset_name = list(system_presets.keys())[0]
+                system_content = system_presets[preset_name]
             else:
-                # 언어 변경 실패 시 아무 것도 하지 않음
-                return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+                system_content = _("system_message_default")
 
-        # 언어 변경 이벤트 연결
-        language_dropdown.change(
-            fn=change_language,
-            inputs=[language_dropdown, character_dropdown],
-            outputs=[
-                title,
-                language_dropdown,
-                system_message_box,
-                model_type_dropdown,
-                model_dropdown,
-                api_key_text,
-                image_input,
-                msg,
-                send_btn,
-                seed_input,
-                reset_btn,
-                reset_all_btn,
+            return [
+                gr.update(value=f"## {_('main_title')}"),
+                gr.update(label=_('language_select'),
+                info=_('language_info')),
+                gr.update(
+                    label=_("system_message"),
+                    value=_("system_message_default"),
+                    placeholder=_("system_message_placeholder")
+                ),
+                gr.update(label=_("model_type_label")),
+                gr.update(label=_("model_select_label")),
+                gr.update(label=_("api_key_label")),
+                gr.update(label=_("image_upload_label")),
+                gr.update(
+                    label=_("message_input_label"),
+                    placeholder=_("message_placeholder")
+                ),
+                gr.update(value=_("send_button")),
+                gr.update(label=_("seed_label"), info=_("seed_info")),
+                gr.update(value=_("reset_session_button")),
+                gr.update(value=_("reset_all_sessions_button")),
             ]
-        )
+        else:
+            # 언어 변경 실패 시 아무 것도 하지 않음
+            return gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+
+    # 언어 변경 이벤트 연결
+    language_dropdown.change(
+        fn=change_language,
+        inputs=[language_dropdown, character_dropdown],
+        outputs=[
+            title,
+            language_dropdown,
+            system_message_box,
+            model_type_dropdown,
+            model_dropdown,
+            api_key_text,
+            image_input,
+            msg,
+            send_btn,
+            seed_input,
+            reset_btn,
+            reset_all_btn,
+        ]
+    )
         # 메시지 전송 시 함수 연결
-        msg.submit(
-            fn=main_tab.process_message,
-            inputs=[
-                msg,  # 사용자 입력
-                session_id_state,
-                history_state,
-                system_message_box,
-                model_dropdown,
-                custom_model_path_state,
-                image_input,
-                api_key_text,
-                selected_device_state,
-                seed_state,
-                selected_language_state,
-                character_dropdown
-            ],
-            outputs=[
-                msg,            # 사용자 입력 필드 초기화
-                history_state,  # 히스토리 업데이트
-                chatbot,        # Chatbot UI 업데이트
-                status_text     # 상태 메시지 업데이트
-            ],
-            queue=False
-        ).then(
-            fn=main_tab.filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=chatbot,
-            queue=False
-        )
+    msg.submit(
+        fn=main_tab.process_message,
+        inputs=[
+            msg,  # 사용자 입력
+            session_id_state,
+            history_state,
+            system_message_box,
+            model_dropdown,
+            custom_model_path_state,
+            image_input,
+            api_key_text,
+            selected_device_state,
+            seed_state,
+            selected_language_state,
+            character_dropdown
+        ],
+        outputs=[
+            msg,            # 사용자 입력 필드 초기화
+            history_state,  # 히스토리 업데이트
+            chatbot,        # Chatbot UI 업데이트
+            status_text     # 상태 메시지 업데이트
+        ],
+        queue=False
+    ).then(
+        fn=main_tab.filter_messages_for_chatbot,
+        inputs=[history_state],
+        outputs=chatbot,
+        queue=False
+    )
 
-        send_btn.click(
-            fn=main_tab.process_message,
-            inputs=[
-                msg, 
-                session_id_state, 
-                history_state, 
-                system_message_box, 
-                model_dropdown, 
-                custom_model_path_state, 
-                image_input, 
-                api_key_text, 
-                selected_device_state, 
-                seed_state,
-                selected_language_state,
-                character_dropdown
-            ],
-            outputs=[
-                msg, 
-                history_state, 
-                chatbot, 
-                status_text
-            ],
-            queue=False
-        ).then(
-            fn=main_tab.filter_messages_for_chatbot,            # 추가된 부분
-            inputs=[history_state],
-            outputs=chatbot,                           # chatbot에 최종 전달
-            queue=False
-        )
+    send_btn.click(
+        fn=main_tab.process_message,
+        inputs=[
+            msg, 
+            session_id_state, 
+            history_state, 
+            system_message_box, 
+            model_dropdown, 
+            custom_model_path_state, 
+            image_input, 
+            api_key_text, 
+            selected_device_state, 
+            seed_state,
+            selected_language_state,
+            character_dropdown
+        ],
+        outputs=[
+            msg, 
+            history_state, 
+            chatbot, 
+            status_text
+        ],
+        queue=False
+    ).then(
+        fn=main_tab.filter_messages_for_chatbot,            # 추가된 부분
+        inputs=[history_state],
+        outputs=chatbot,                           # chatbot에 최종 전달
+        queue=False
+    )
         
-        start_conversation_button.click(
-            fn=main_tab.process_character_conversation,
-            inputs=[
-                history_state,
-                character_conversation_dropdown,
-                model_type_dropdown, 
-                model_dropdown,
-                custom_model_path_state,
-                image_input,
-                api_key_text,
-                selected_device_state,
-                seed_state
-            ],
-            outputs=[history_state, profile_image]
-        ).then(
-            fn=main_tab.filter_messages_for_chatbot,  # 히스토리를 채팅창에 표시하기 위한 필터링
-            inputs=[history_state],
-            outputs=[chatbot]
-        )
+    start_conversation_button.click(
+        fn=main_tab.process_character_conversation,
+        inputs=[
+            history_state,
+            character_conversation_dropdown,
+            model_type_dropdown, 
+            model_dropdown,
+            custom_model_path_state,
+            image_input,
+            api_key_text,
+            selected_device_state,
+            seed_state
+        ],
+        outputs=[history_state, profile_image]
+    ).then(
+        fn=main_tab.filter_messages_for_chatbot,  # 히스토리를 채팅창에 표시하기 위한 필터링
+        inputs=[history_state],
+        outputs=[chatbot]
+    )
         
-        # 초기화 버튼 클릭 시 확인 메시지 표시
-        reset_btn.click(
-            fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-            inputs=[],
-            outputs=[reset_confirm_row, reset_yes_btn, reset_no_btn]
-        )
-        reset_all_btn.click(
-            fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-            inputs=[],
-            outputs=[reset_all_confirm_row, reset_all_yes_btn, reset_all_no_btn]
-        )
+    # 초기화 버튼 클릭 시 확인 메시지 표시
+    reset_btn.click(
+        fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
+        inputs=[],
+        outputs=[reset_confirm_row, reset_yes_btn, reset_no_btn]
+    )
+    reset_all_btn.click(
+        fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
+        inputs=[],
+        outputs=[reset_all_confirm_row, reset_all_yes_btn, reset_all_no_btn]
+    )
 
-        # "예" 버튼 클릭 시 세션 초기화 수행
-        reset_yes_btn.click(
-            fn=main_tab.reset_session,
-            inputs=[history_state, chatbot, system_message_box, selected_language_state, session_id_state],
-            outputs=[msg, history_state, chatbot, status_text],
-            queue=False
-        ).then(
-            fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
-            inputs=[],
-            outputs=[reset_confirm_row],
-            queue=False
-        )
+    # "예" 버튼 클릭 시 세션 초기화 수행
+    reset_yes_btn.click(
+        fn=main_tab.reset_session,
+        inputs=[history_state, chatbot, system_message_box, selected_language_state, session_id_state],
+        outputs=[msg, history_state, chatbot, status_text],
+        queue=False
+    ).then(
+        fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
+        inputs=[],
+        outputs=[reset_confirm_row],
+        queue=False
+    )
 
-        # "아니요" 버튼 클릭 시 확인 메시지 숨김
-        reset_no_btn.click(
-            fn=lambda: gr.update(visible=False),
-            inputs=[],
-            outputs=[reset_confirm_row],
-            queue=False
-        )
+    # "아니요" 버튼 클릭 시 확인 메시지 숨김
+    reset_no_btn.click(
+        fn=lambda: gr.update(visible=False),
+        inputs=[],
+        outputs=[reset_confirm_row],
+        queue=False
+    )
 
-        # "모든 세션 초기화"의 "예" 버튼 클릭 시 모든 세션 초기화 수행
-        reset_all_yes_btn.click(
-            fn=main_tab.reset_all_sessions,
-            inputs=[history_state, chatbot, system_message_box, selected_language_state],
-            outputs=[msg, history_state, chatbot, status_text],
-            queue=False
-        ).then(
-            fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
-            inputs=[],
-            outputs=[reset_all_confirm_row],
-            queue=False
-        ).then(
-            fn=main_tab.refresh_sessions,
-            inputs=[],
-            outputs=[session_select_dropdown]
-        )
+    # "모든 세션 초기화"의 "예" 버튼 클릭 시 모든 세션 초기화 수행
+    reset_all_yes_btn.click(
+        fn=main_tab.reset_all_sessions,
+        inputs=[history_state, chatbot, system_message_box, selected_language_state],
+        outputs=[msg, history_state, chatbot, status_text],
+        queue=False
+    ).then(
+        fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
+        inputs=[],
+        outputs=[reset_all_confirm_row],
+        queue=False
+    ).then(
+        fn=main_tab.refresh_sessions,
+        inputs=[],
+        outputs=[session_select_dropdown]
+    )
 
-        # "모든 세션 초기화"의 "아니요" 버튼 클릭 시 확인 메시지 숨김
-        reset_all_no_btn.click(
-            fn=lambda: gr.update(visible=False),
-            inputs=[],
-            outputs=[reset_all_confirm_row],
-            queue=False
-        )
+    # "모든 세션 초기화"의 "아니요" 버튼 클릭 시 확인 메시지 숨김
+    reset_all_no_btn.click(
+        fn=lambda: gr.update(visible=False),
+        inputs=[],
+        outputs=[reset_all_confirm_row],
+        queue=False
+    )
         
-        demo.load(
-            fn=main_tab.refresh_sessions,
-            inputs=[],
-            outputs=[session_select_dropdown],
-            queue=False
-        )
+    demo.load(
+        fn=main_tab.refresh_sessions,
+        inputs=[],
+        outputs=[session_select_dropdown],
+        queue=False
+    )
         
-        session_select_dropdown.change(
-            fn=apply_session_immediately,
-            inputs=[session_select_dropdown],
-            outputs=[history_state, session_id_state, session_select_info]
-        ).then(
-            fn=main_tab.filter_messages_for_chatbot,
-            inputs=[history_state],
-            outputs=[chatbot]
-        )
+    session_select_dropdown.change(
+        fn=apply_session_immediately,
+        inputs=[session_select_dropdown],
+        outputs=[history_state, session_id_state, session_select_info]
+    ).then(
+        fn=main_tab.filter_messages_for_chatbot,
+        inputs=[history_state],
+        outputs=[chatbot]
+    )
         
             
     create_download_tab()
