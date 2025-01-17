@@ -229,15 +229,15 @@ class MainTab:
                 messages_for_chatbot.append({"role": msg["role"], "content": display_content})
         return messages_for_chatbot
 
-    def reset_session(self, history, chatbot, system_message_default, language=None):
+    def reset_session(self, history, chatbot, system_message_default, language=None, session_id="demo_session"):
         """
         특정 세션을 초기화하는 함수.
         """
         if language is None:
             language = self.default_language
-            
+
         try:
-            success = delete_session_history("demo_session")
+            success = delete_session_history(session_id)
             if not success:
                 return gr.update(), history, self.filter_messages_for_chatbot(history), "❌ 세션 초기화에 실패했습니다."
 
@@ -247,7 +247,7 @@ class MainTab:
             }
             new_history = [default_system]
 
-            save_chat_history_db(new_history, session_id="demo_session")
+            save_chat_history_db(new_history, session_id=session_id)
             chatbot_history = self.filter_messages_for_chatbot(new_history)
 
             return "", new_history, chatbot_history, "✅ 세션이 초기화되었습니다."
@@ -262,7 +262,7 @@ class MainTab:
         """
         if language is None:
             language = self.default_language
-            
+
         try:
             success = delete_all_sessions()
             if not success:

@@ -624,26 +624,21 @@ with gr.Blocks() as demo:
         
         # 초기화 버튼 클릭 시 확인 메시지 표시
         reset_btn.click(
-            fn=main_tab.reset_session,
-            inputs=[history_state, chatbot, system_message_box, selected_language_state],
-            outputs=[msg, history_state, chatbot, status_text]
+            fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+            inputs=[],
+            outputs=[reset_confirm_row, reset_yes_btn, reset_no_btn]
         )
         reset_all_btn.click(
-            fn=main_tab.reset_all_sessions,
-            inputs=[history_state, chatbot, system_message_box, selected_language_state],
-            outputs=[msg, history_state, chatbot, status_text]
+            fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+            inputs=[],
+            outputs=[reset_all_confirm_row, reset_all_yes_btn, reset_all_no_btn]
         )
 
         # "예" 버튼 클릭 시 세션 초기화 수행
         reset_yes_btn.click(
-            fn=main_tab.reset_session,  # 이미 정의된 reset_session 함수
-            inputs=[history_state, chatbot, system_message_box],
-            outputs=[
-                msg,            # 사용자 입력 필드 초기화
-                history_state,  # 히스토리 업데이트
-                chatbot,        # Chatbot UI 업데이트
-                status_text     # 상태 메시지 업데이트
-            ],
+            fn=main_tab.reset_session,
+            inputs=[history_state, chatbot, system_message_box, selected_language_state, session_id_state],
+            outputs=[msg, history_state, chatbot, status_text],
             queue=False
         ).then(
             fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
@@ -662,14 +657,9 @@ with gr.Blocks() as demo:
 
         # "모든 세션 초기화"의 "예" 버튼 클릭 시 모든 세션 초기화 수행
         reset_all_yes_btn.click(
-            fn=main_tab.reset_all_sessions,  # 이미 정의된 reset_all_sessions 함수
-            inputs=[history_state, chatbot, system_message_box],
-            outputs=[
-                msg,            # 사용자 입력 필드 초기화
-                history_state,  # 히스토리 업데이트
-                chatbot,        # Chatbot UI 업데이트
-                status_text     # 상태 메시지 업데이트
-            ],
+            fn=main_tab.reset_all_sessions,
+            inputs=[history_state, chatbot, system_message_box, selected_language_state],
+            outputs=[msg, history_state, chatbot, status_text],
             queue=False
         ).then(
             fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
@@ -888,17 +878,50 @@ with gr.Blocks() as demo:
             # 프리셋 삭제 버튼 클릭 시
             def on_delete_preset_click(name):
                 if not name:
-                    return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(choices=get_preset_choices())
-                success, message = handle_delete_preset(name)
-                if success:
-                    return message, gr.update(choices=get_preset_choices())
+                    return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                confirmation_msg = f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?"
+                return confirmation_msg, gr.update(visible=True), gr.update(choices=get_preset_choices(default_language))
+            
+            
+            # 삭제 확인 버튼 추가
+            delete_confirm_btn = gr.Button("삭제 확인", variant="danger", visible=False)
+            delete_cancel_btn = gr.Button("삭제 취소", variant="secondary", visible=False)
+            delete_preset_info = gr.Textbox(label="프리셋 삭제 결과", interactive=False)
+            
+            with gr.Row(visible=False) as delete_preset_confirm_row:
+                delete_preset_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 프리셋을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
+                delete_preset_yes_btn = gr.Button("✅ 예", variant="danger")
+                delete_preset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+            
+            # 프리셋 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            def confirm_delete_preset(name, confirm):
+                if confirm:
+                    success, message = handle_delete_preset(name, default_language)
+                    if success:
+                        return message, gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                    else:
+                        return f"❌ {message}", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
                 else:
-                    return message, gr.update(choices=get_preset_choices())
-        
+                    return "❌ 삭제가 취소되었습니다.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                
+            # 프리셋 삭제 버튼과 확인 버튼의 상호작용 연결
             delete_preset_btn.click(
-                fn=on_delete_preset_click,
+                fn=lambda name: (f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?", gr.update(visible=True)),
                 inputs=[preset_dropdown],
-                outputs=[preset_info, preset_dropdown]
+                outputs=[delete_preset_confirm_msg, delete_preset_confirm_row]
+            )
+            
+            delete_preset_yes_btn.click(
+                fn=confirm_delete_preset,
+                inputs=[preset_dropdown, gr.State(True)],  # confirm=True
+                outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
+            )
+
+            # 프리셋 삭제 취소 버튼 클릭 시
+            delete_preset_no_btn.click(
+                fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False), preset_dropdown),
+                inputs=[],
+                outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
             )
         
             apply_preset_btn.click(
@@ -1148,21 +1171,31 @@ with gr.Blocks() as demo:
                 outputs=chatbot                 # (3) Chatbot 업데이트
             )
             
+            # 세션 삭제 버튼 클릭 시 확인 메시지 표시
+            with gr.Row(visible=False) as delete_session_confirm_row:
+                delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
+                delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
+                delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
+    
+            # 세션 삭제 버튼 클릭 시 확인 메시지 표시
             delete_session_btn.click(
-                fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
-                inputs=[],
-                outputs=[confirm_delete_checkbox, confirm_delete_btn]
+                fn=lambda name: (f"⚠️ 정말로 세션 '{name}'을(를) 삭제하시겠습니까?", gr.update(visible=True)),
+                inputs=[existing_sessions_dropdown],
+                outputs=[delete_session_confirm_row]
             )
             
-            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
-            confirm_delete_btn.click(
-                fn=confirm_delete,
-                inputs=[existing_sessions_dropdown, session_id_state, confirm_delete_checkbox],
-                outputs=[session_manage_info, confirm_delete_checkbox, confirm_delete_btn]
-            ).then(
-                fn=refresh_sessions,  # 세션 삭제 후 목록 새로고침
+            # 세션 삭제 확인 버튼 클릭 시 실제 삭제 수행
+            delete_session_yes_btn.click(
+                fn=delete_session,
+                inputs=[existing_sessions_dropdown, session_id_state],
+                outputs=[session_manage_info, gr.update(visible=False), existing_sessions_dropdown]
+            )
+    
+            # 세션 삭제 취소 버튼 클릭 시 확인 메시지 숨김
+            delete_session_no_btn.click(
+                fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False)),
                 inputs=[],
-                outputs=[existing_sessions_dropdown, session_manage_info]
+                outputs=[session_manage_info, gr.update(visible=False)]
             )
         with gr.Accordion("장치 설정", open=False):
             device_dropdown = gr.Dropdown(
