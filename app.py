@@ -7,7 +7,6 @@ import argparse
 import gradio as gr
 import logging
 from logging.handlers import RotatingFileHandler
-import json
 import sqlite3
 from common.database import (
     initialize_database,
@@ -17,12 +16,9 @@ from common.database import (
     load_chat_from_db, 
     load_system_presets, 
     get_existing_sessions, 
-    save_chat_button_click, 
-    save_chat_history_csv, 
-    save_chat_history_db, 
     get_preset_choices,
     insert_default_presets)
-from common.models import default_device, generate_stable_diffusion_prompt_cached
+from common.models import default_device
 from common.cache import models_cache
 from common.translations import translation_manager, _, detect_system_language
 from common.persona_speech_manager import PersonaSpeechManager
@@ -33,7 +29,6 @@ from tabs.main_tab import (
     gguf_local, 
     mlx_local,
     MainTab,
-    generator_choices,
     characters,
     get_speech_manager,
     update_system_message_and_profile,
