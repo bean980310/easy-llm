@@ -624,12 +624,12 @@ with gr.Blocks() as demo:
         
         # 초기화 버튼 클릭 시 확인 메시지 표시
         reset_btn.click(
-            fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+            fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
             inputs=[],
             outputs=[reset_confirm_row, reset_yes_btn, reset_no_btn]
         )
         reset_all_btn.click(
-            fn=lambda: (gr.update(visible=True), gr.update(visible=True)),
+            fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
             inputs=[],
             outputs=[reset_all_confirm_row, reset_all_yes_btn, reset_all_no_btn]
         )
@@ -770,452 +770,373 @@ with gr.Blocks() as demo:
     with gr.Tab("설정"):
         gr.Markdown("### 설정")
 
-        # 사용자 지정 모델 경로 설정 섹션
-        with gr.Accordion("사용자 지정 모델 경로 설정", open=False):
-            custom_path_text = gr.Textbox(
-                label="사용자 지정 모델 경로",
-                placeholder="./models/custom-model",
-            )
-            apply_custom_path_btn = gr.Button("경로 적용")
+        with gr.Tabs():
+            # 사용자 지정 모델 경로 설정 섹션
+            with gr.Tab("사용자 지정 모델 경로 설정"):
+                custom_path_text = gr.Textbox(
+                    label="사용자 지정 모델 경로",
+                    placeholder="./models/custom-model",
+                )
+                apply_custom_path_btn = gr.Button("경로 적용")
 
-            # custom_path_text -> custom_model_path_state 저장
-            def update_custom_path(path):
-                return path
+                # custom_path_text -> custom_model_path_state 저장
+                def update_custom_path(path):
+                    return path
 
-            apply_custom_path_btn.click(
-                fn=update_custom_path,
-                inputs=[custom_path_text],
-                outputs=[custom_model_path_state]
-            )
+                apply_custom_path_btn.click(
+                    fn=update_custom_path,
+                    inputs=[custom_path_text],
+                    outputs=[custom_model_path_state]
+                )
 
-         # 시스템 메시지 프리셋 관리 섹션 추가
-        with gr.Accordion("시스템 메시지 프리셋 관리", open=False):
-            with gr.Row():
-                preset_dropdown = gr.Dropdown(
-                    label="프리셋 선택",  # 필요 시 번역 키로 변경
-                    choices=get_preset_choices(default_language),
-                    value=get_preset_choices(default_language)[0] if get_preset_choices(default_language) else None
+            # 시스템 메시지 프리셋 관리 섹션 추가
+            with gr.Tab("시스템 메시지 프리셋 관리"):
+                with gr.Row():
+                    preset_dropdown = gr.Dropdown(
+                        label="프리셋 선택",  # 필요 시 번역 키로 변경
+                        choices=get_preset_choices(default_language),
+                        value=get_preset_choices(default_language)[0] if get_preset_choices(default_language) else None
+                    )
+                    refresh_preset_button = gr.Button("프리셋 목록 갱신")
+                    refresh_preset_button.click(
+                        fn=main_tab.refresh_preset_list,
+                        inputs=[selected_language_state],
+                        outputs=[preset_dropdown]
+                    )
+                    apply_preset_btn = gr.Button("프리셋 적용")
+            
+                with gr.Row():
+                    preset_name = gr.Textbox(
+                        label="새 프리셋 이름",
+                        placeholder="예: 친절한 비서",
+                        interactive=True
+                    )
+                    preset_content = gr.Textbox(
+                        label="프리셋 내용",
+                        placeholder="프리셋으로 사용할 시스템 메시지를 입력하세요.",
+                        lines=4,
+                        interactive=True
+                    )
+            
+                with gr.Row():
+                    add_preset_btn = gr.Button("프리셋 추가", variant="primary")
+                    delete_preset_btn = gr.Button("프리셋 삭제", variant="secondary")
+            
+                preset_info = gr.Textbox(
+                    label="프리셋 관리 결과",
+                    interactive=False
                 )
-                refresh_preset_button = gr.Button("프리셋 목록 갱신")
-                refresh_preset_button.click(
-                    fn=main_tab.refresh_preset_list,
-                    inputs=[selected_language_state],
-                    outputs=[preset_dropdown]
+            
+                # 덮어쓰기 확인을 위한 컴포넌트 추가 (처음에는 숨김)
+                with gr.Row():
+                    confirm_overwrite_btn = gr.Button("확인", variant="primary", visible=False)
+                    cancel_overwrite_btn = gr.Button("취소", variant="secondary", visible=False)
+            
+                overwrite_message = gr.Textbox(
+                    label="덮어쓰기 메시지",
+                    value="",
+                    interactive=False
                 )
-                apply_preset_btn = gr.Button("프리셋 적용")
-        
-            with gr.Row():
-                preset_name = gr.Textbox(
-                    label="새 프리셋 이름",
-                    placeholder="예: 친절한 비서",
-                    interactive=True
+            
+                # 프리셋 Dropdown 초기화
+                demo.load(
+                    fn=main_tab.initial_load_presets,
+                    inputs=[],
+                    outputs=[preset_dropdown],
+                    queue=False
                 )
-                preset_content = gr.Textbox(
-                    label="프리셋 내용",
-                    placeholder="프리셋으로 사용할 시스템 메시지를 입력하세요.",
-                    lines=4,
-                    interactive=True
+                
+                add_preset_btn.click(
+                    fn=on_add_preset_click,
+                    inputs=[preset_name, preset_content],
+                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
                 )
-        
-            with gr.Row():
-                add_preset_btn = gr.Button("프리셋 추가", variant="primary")
-                delete_preset_btn = gr.Button("프리셋 삭제", variant="secondary")
-        
-            preset_info = gr.Textbox(
-                label="프리셋 관리 결과",
-                interactive=False
-            )
-        
-            # 덮어쓰기 확인을 위한 컴포넌트 추가 (처음에는 숨김)
-            with gr.Row():
-                confirm_overwrite_btn = gr.Button("확인", variant="primary", visible=False)
-                cancel_overwrite_btn = gr.Button("취소", variant="secondary", visible=False)
-        
-            overwrite_message = gr.Textbox(
-                label="덮어쓰기 메시지",
-                value="",
-                interactive=False
-            )
-        
-            # 프리셋 Dropdown 초기화
-            demo.load(
-                fn=main_tab.initial_load_presets,
-                inputs=[],
-                outputs=[preset_dropdown],
-                queue=False
-            )
             
-            add_preset_btn.click(
-                fn=on_add_preset_click,
-                inputs=[preset_name, preset_content],
-                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-            )
-        
-            # 덮어쓰기 확인 버튼 클릭 시
-            def confirm_overwrite(name, content):
-                success, message = handle_add_preset(name.strip(), content.strip(), overwrite=True)
-                if success:
-                    return message, gr.update(visible=False), gr.update(visible=False), ""
-                else:
-                    return message, gr.update(visible=False), gr.update(visible=False), ""
-            
-            confirm_overwrite_btn.click(
-                fn=confirm_overwrite,
-                inputs=[preset_name, preset_content],
-                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-            )
-        
-            # 덮어쓰기 취소 버튼 클릭 시
-            def cancel_overwrite():
-                return "❌ 덮어쓰기가 취소되었습니다.", gr.update(visible=False), gr.update(visible=False), ""
-            
-            cancel_overwrite_btn.click(
-                fn=cancel_overwrite,
-                inputs=[],
-                outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
-            )
-        
-            # 프리셋 삭제 버튼 클릭 시
-            def on_delete_preset_click(name):
-                if not name:
-                    return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                confirmation_msg = f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?"
-                return confirmation_msg, gr.update(visible=True), gr.update(choices=get_preset_choices(default_language))
-            
-            
-            # 삭제 확인 버튼 추가
-            delete_confirm_btn = gr.Button("삭제 확인", variant="danger", visible=False)
-            delete_cancel_btn = gr.Button("삭제 취소", variant="secondary", visible=False)
-            delete_preset_info = gr.Textbox(label="프리셋 삭제 결과", interactive=False)
-            
-            with gr.Row(visible=False) as delete_preset_confirm_row:
-                delete_preset_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 프리셋을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
-                delete_preset_yes_btn = gr.Button("✅ 예", variant="danger")
-                delete_preset_no_btn = gr.Button("❌ 아니요", variant="secondary")
-            
-            # 프리셋 삭제 확인 버튼 클릭 시 실제 삭제 수행
-            def confirm_delete_preset(name, confirm):
-                if confirm:
-                    success, message = handle_delete_preset(name, default_language)
+                # 덮어쓰기 확인 버튼 클릭 시
+                def confirm_overwrite(name, content):
+                    success, message = handle_add_preset(name.strip(), content.strip(), overwrite=True)
                     if success:
-                        return message, gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                        return message, gr.update(visible=False), gr.update(visible=False), ""
                     else:
-                        return f"❌ {message}", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
-                else:
-                    return "❌ 삭제가 취소되었습니다.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                        return message, gr.update(visible=False), gr.update(visible=False), ""
                 
-            # 프리셋 삭제 버튼과 확인 버튼의 상호작용 연결
-            delete_preset_btn.click(
-                fn=lambda name: (f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?", gr.update(visible=True)),
-                inputs=[preset_dropdown],
-                outputs=[delete_preset_confirm_msg, delete_preset_confirm_row]
-            )
-            
-            delete_preset_yes_btn.click(
-                fn=confirm_delete_preset,
-                inputs=[preset_dropdown, gr.State(True)],  # confirm=True
-                outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
-            )
-
-            # 프리셋 삭제 취소 버튼 클릭 시
-            delete_preset_no_btn.click(
-                fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False), preset_dropdown),
-                inputs=[],
-                outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
-            )
-        
-            apply_preset_btn.click(
-                fn=apply_preset,
-                inputs=[preset_dropdown, session_id_state, history_state, selected_language_state],
-                outputs=[preset_info, history_state, system_message_box, profile_image]
-            ).then(
-                fn=main_tab.filter_messages_for_chatbot,
-                inputs=[history_state],
-                outputs=chatbot
-            )
-        # 채팅 기록 저장 섹션
-        with gr.Accordion("채팅 기록 저장", open=False):
-            save_button = gr.Button("채팅 기록 저장", variant="secondary")
-            save_info = gr.Textbox(label="저장 결과", interactive=False)
-
-            save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
-            save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
-
-            save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
-            save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
-
-            def save_chat_button_click_csv(history):
-                if not history:
-                    return "채팅 이력이 없습니다."
-                saved_path = save_chat_history_csv(history)
-                if saved_path is None:
-                    return "❌ 채팅 기록 CSV 저장 실패"
-                else:
-                    return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
-                
-            def save_chat_button_click_db(history):
-                if not history:
-                    return "채팅 이력이 없습니다."
-                ok = save_chat_history_db(history, session_id="demo_session")
-                if ok:
-                    return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
-                else:
-                    return "❌ DB 저장 실패"
-
-            save_csv_button.click(
-                fn=save_chat_button_click_csv,
-                inputs=[history_state],
-                outputs=save_csv_info
-            )
-
-            # save_button이 클릭되면 save_chat_button_click 실행
-            save_button.click(
-                fn=save_chat_button_click,
-                inputs=[history_state],
-                outputs=save_info
-            )
-            
-            save_db_button.click(
-                fn=save_chat_button_click_db,
-                inputs=[history_state],
-                outputs=save_db_info
-            )
-
-        # 채팅 히스토리 재로드 섹션
-        with gr.Accordion("채팅 히스토리 재로드", open=False):
-            upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
-            load_info = gr.Textbox(label="로딩 결과", interactive=False)
-            
-            def load_chat_from_json(json_file):
-                """
-                업로드된 JSON 파일을 파싱하여 history_state에 주입
-                """
-                if not json_file:
-                    return [], "파일이 없습니다."
-                try:
-                    with open(json_file.name, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if not isinstance(data, list):
-                        return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
-                    # data를 그대로 history_state로 반환
-                    return data, "✅ 대화가 로딩되었습니다."
-                except Exception as e:
-                    logger.error(f"JSON 로드 오류: {e}")
-                    return [], f"❌ 로딩 실패: {e}"
-
-            upload_json.change(
-                fn=load_chat_from_json,
-                inputs=[upload_json],
-                outputs=[history_state, load_info]
-            )
-
-        # 세션 관리 섹션
-        with gr.Accordion("세션 관리", open=False):
-            gr.Markdown("### 세션 관리")
-            with gr.Row():
-                refresh_sessions_btn = gr.Button("세션 목록 갱신")
-                existing_sessions_dropdown = gr.Dropdown(
-                    label="기존 세션 목록",
-                    choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
-                    value=None,
-                    interactive=True
+                confirm_overwrite_btn.click(
+                    fn=confirm_overwrite,
+                    inputs=[preset_name, preset_content],
+                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
                 )
+            
+                # 덮어쓰기 취소 버튼 클릭 시
+                def cancel_overwrite():
+                    return "❌ 덮어쓰기가 취소되었습니다.", gr.update(visible=False), gr.update(visible=False), ""
+                
+                cancel_overwrite_btn.click(
+                    fn=cancel_overwrite,
+                    inputs=[],
+                    outputs=[preset_info, confirm_overwrite_btn, cancel_overwrite_btn, overwrite_message]
+                )
+            
+                # 프리셋 삭제 버튼 클릭 시
+                def on_delete_preset_click(name):
+                    if not name:
+                        return "❌ 삭제할 프리셋을 선택해주세요.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                    confirmation_msg = f"⚠️ 정말로 '{name}' 프리셋을 삭제하시겠습니까?"
+                    return confirmation_msg, gr.update(visible=True), gr.update(choices=get_preset_choices(default_language))
+                
+                
+                # 삭제 확인 버튼 추가
+                delete_confirm_btn = gr.Button("삭제 확인", variant="danger", visible=False)
+                delete_cancel_btn = gr.Button("삭제 취소", variant="secondary", visible=False)
+                delete_preset_info = gr.Textbox(label="프리셋 삭제 결과", interactive=False)
+                
+                with gr.Row(visible=False) as delete_preset_confirm_row:
+                    delete_preset_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 프리셋을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
+                    delete_preset_yes_btn = gr.Button("✅ 예", variant="danger")
+                    delete_preset_no_btn = gr.Button("❌ 아니요", variant="secondary")
+                
+                # 프리셋 삭제 확인 버튼 클릭 시 실제 삭제 수행
+                def confirm_delete_preset(name, confirm):
+                    if confirm:
+                        success, message = handle_delete_preset(name, default_language)
+                        if success:
+                            return message, gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                        else:
+                            return f"❌ {message}", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                    else:
+                        return "❌ 삭제가 취소되었습니다.", gr.update(visible=False), gr.update(choices=get_preset_choices(default_language))
+                    
+                # 프리셋 삭제 버튼과 확인 버튼의 상호작용 연결
+                delete_preset_btn.click(
+                    fn=lambda : (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
+                    inputs=[preset_dropdown],
+                    outputs=[delete_preset_confirm_row, delete_preset_yes_btn, delete_preset_no_btn]
+                )
+                
+                delete_preset_yes_btn.click(
+                    fn=confirm_delete_preset,
+                    inputs=[preset_dropdown, gr.State(True)],  # confirm=True
+                    outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
+                )
+
+                # 프리셋 삭제 취소 버튼 클릭 시
+                delete_preset_no_btn.click(
+                    fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False), preset_dropdown),
+                    inputs=[],
+                    outputs=[preset_info, delete_preset_confirm_row, preset_dropdown]
+                )
+            
+                apply_preset_btn.click(
+                    fn=apply_preset,
+                    inputs=[preset_dropdown, session_id_state, history_state, selected_language_state],
+                    outputs=[preset_info, history_state, system_message_box, profile_image]
+                ).then(
+                    fn=main_tab.filter_messages_for_chatbot,
+                    inputs=[history_state],
+                    outputs=chatbot
+                )
+            # 채팅 기록 저장 섹션
+            with gr.Tab("채팅 기록 저장"):
+                save_button = gr.Button("채팅 기록 저장", variant="secondary")
+                save_info = gr.Textbox(label="저장 결과", interactive=False)
+
+                save_csv_button = gr.Button("채팅 기록 CSV 저장", variant="secondary")
+                save_csv_info = gr.Textbox(label="CSV 저장 결과", interactive=False)
+
+                save_db_button = gr.Button("채팅 기록 DB 저장", variant="secondary")
+                save_db_info = gr.Textbox(label="DB 저장 결과", interactive=False)
+
+                def save_chat_button_click_csv(history):
+                    if not history:
+                        return "채팅 이력이 없습니다."
+                    saved_path = save_chat_history_csv(history)
+                    if saved_path is None:
+                        return "❌ 채팅 기록 CSV 저장 실패"
+                    else:
+                        return f"✅ 채팅 기록 CSV가 저장되었습니다: {saved_path}"
+                    
+                def save_chat_button_click_db(history):
+                    if not history:
+                        return "채팅 이력이 없습니다."
+                    ok = save_chat_history_db(history, session_id="demo_session")
+                    if ok:
+                        return f"✅ DB에 채팅 기록이 저장되었습니다 (session_id=demo_session)"
+                    else:
+                        return "❌ DB 저장 실패"
+
+                save_csv_button.click(
+                    fn=save_chat_button_click_csv,
+                    inputs=[history_state],
+                    outputs=save_csv_info
+                )
+
+                # save_button이 클릭되면 save_chat_button_click 실행
+                save_button.click(
+                    fn=save_chat_button_click,
+                    inputs=[history_state],
+                    outputs=save_info
+                )
+                
+                save_db_button.click(
+                    fn=save_chat_button_click_db,
+                    inputs=[history_state],
+                    outputs=save_db_info
+                )
+
+            # 채팅 히스토리 재로드 섹션
+            with gr.Tab("채팅 히스토리 재로드"):
+                upload_json = gr.File(label="대화 JSON 업로드", file_types=[".json"])
+                load_info = gr.Textbox(label="로딩 결과", interactive=False)
+                
+                def load_chat_from_json(json_file):
+                    """
+                    업로드된 JSON 파일을 파싱하여 history_state에 주입
+                    """
+                    if not json_file:
+                        return [], "파일이 없습니다."
+                    try:
+                        with open(json_file.name, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        if not isinstance(data, list):
+                            return [], "JSON 구조가 올바르지 않습니다. (list 형태가 아님)"
+                        # data를 그대로 history_state로 반환
+                        return data, "✅ 대화가 로딩되었습니다."
+                    except Exception as e:
+                        logger.error(f"JSON 로드 오류: {e}")
+                        return [], f"❌ 로딩 실패: {e}"
+
+                upload_json.change(
+                    fn=load_chat_from_json,
+                    inputs=[upload_json],
+                    outputs=[history_state, load_info]
+                )
+
+            # 세션 관리 섹션
+            with gr.Tab("세션 관리"):
+                gr.Markdown("### 세션 관리")
+                with gr.Row():
+                    refresh_sessions_btn = gr.Button("세션 목록 갱신")
+                    existing_sessions_dropdown = gr.Dropdown(
+                        label="기존 세션 목록",
+                        choices=[],  # 초기에는 비어 있다가, 버튼 클릭 시 갱신
+                        value=None,
+                        interactive=True
+                    )
+                    current_session_display = gr.Textbox(
+                        label="현재 세션 ID",
+                        value="",
+                        interactive=False
+                    )
+                
+                with gr.Row():
+                    create_new_session_btn = gr.Button("새 세션 생성")
+                    apply_session_btn = gr.Button("세션 적용")
+                    delete_session_btn = gr.Button("세션 삭제")
+                
+                session_manage_info = gr.Textbox(
+                    label="세션 관리 결과",
+                    interactive=False
+                )
+                
                 current_session_display = gr.Textbox(
                     label="현재 세션 ID",
                     value="",
                     interactive=False
                 )
-            
-            with gr.Row():
-                create_new_session_btn = gr.Button("새 세션 생성")
-                apply_session_btn = gr.Button("세션 적용")
-                delete_session_btn = gr.Button("세션 삭제")
-            
-            # 삭제 확인을 위한 컴포넌트 추가
-            confirm_delete_checkbox = gr.Checkbox(
-                label="정말로 이 세션을 삭제하시겠습니까?",
-                value=False,
-                interactive=True,
-                visible=False  # 기본적으로 숨김
-            )
-            confirm_delete_btn = gr.Button(
-                "삭제 확인",
-                variant="stop",
-                visible=False  # 기본적으로 숨김
-            )
-            
-            session_manage_info = gr.Textbox(
-                label="세션 관리 결과",
-                interactive=False
-            )
-            
-            current_session_display = gr.Textbox(
-                label="현재 세션 ID",
-                value="",
-                interactive=False
-            )
 
-            session_id_state.change(
-                fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
-                inputs=[session_id_state],
-                outputs=[current_session_display]
-            )
-            
-            def refresh_sessions():
-                """
-                세션 목록 갱신: DB에서 세션 ID들을 불러와서 Dropdown에 업데이트
-                """
-                sessions = get_existing_sessions()
-                logger.info(f"가져온 세션 목록: {sessions}")  # 디버깅용 로그 추가
-                if not sessions:
-                    return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
-                return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
-            
-            def create_new_session():
-                """
-                새 세션 ID를 생성하고 session_id_state에 반영.
-                """
-                new_sid = secrets.token_hex(8)  # 새 세션 ID 생성
-                logger.info(f"새 세션 생성됨: {new_sid}")
+                session_id_state.change(
+                    fn=lambda sid: f"현재 세션: {sid}" if sid else "세션 없음",
+                    inputs=[session_id_state],
+                    outputs=[current_session_display]
+                )
                 
-                # 기본 시스템 메시지 설정
-                system_message = {
-                    "role": "system",
-                    "content": system_message_box.value  # 현재 시스템 메시지 박스의 값을 사용
-                }
+                refresh_sessions_btn.click(
+                    fn=main_tab.refresh_sessions,
+                    inputs=[],
+                    outputs=[existing_sessions_dropdown, session_manage_info]
+                )
                 
-                # 새 세션에 시스템 메시지 저장
-                save_chat_history_db([system_message], session_id=new_sid)
+                # (2) 새 세션 생성
+                create_new_session_btn.click(
+                    fn=lambda: main_tab.create_new_session(system_message_box.value),
+                    inputs=[],
+                    outputs=[session_id_state, session_manage_info]
+                ).then(
+                    fn=lambda: [],
+                    inputs=[],
+                    outputs=[history_state]
+                ).then(
+                    fn=main_tab.filter_messages_for_chatbot,
+                    inputs=[history_state],
+                    outputs=[chatbot]
+                )
                 
-                return new_sid, f"새 세션 생성: {new_sid}"
-        
-            def apply_session(chosen_sid):
-                """
-                Dropdown에서 선택된 세션 ID로, DB에서 history를 불러오고, session_id_state를 갱신
-                """
-                if not chosen_sid:
-                    return [], None, "세션 ID를 선택하세요."
-                loaded_history = load_chat_from_db(chosen_sid)
-                logger.info(f"불러온 히스토리: {loaded_history}")  # 디버깅 로그 추가
-                # history_state에 반영하고, session_id_state도 업데이트
-                return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
-            def delete_session(chosen_sid, current_sid):
-                """
-                선택된 세션을 DB에서 삭제합니다.
-                현재 활성 세션은 삭제할 수 없습니다.
-                """
-                if not chosen_sid:
-                    return "❌ 삭제할 세션을 선택하세요.", False, gr.update()
+                apply_session_btn.click(
+                    fn=main_tab.apply_session,
+                    inputs=[existing_sessions_dropdown],
+                    outputs=[history_state, session_id_state, session_manage_info]
+                ).then(
+                    fn=main_tab.filter_messages_for_chatbot,
+                    inputs=[history_state],
+                    outputs=[chatbot]
+                )
                 
-                if chosen_sid == current_sid:
-                    return "❌ 현재 활성 세션은 삭제할 수 없습니다.", False, gr.update()
+                with gr.Row(visible=False) as delete_session_confirm_row:
+                        delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
+                        delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
+                        delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
+
+                # “세션 삭제” 버튼 클릭 시, 확인창(문구/버튼) 보이기
+                delete_session_btn.click(
+                    fn=lambda: (
+                        gr.update(visible=True),
+                        gr.update(visible=True), 
+                        gr.update(visible=True)
+                    ),
+                    inputs=[],
+                    outputs=[delete_session_confirm_row, delete_session_yes_btn, delete_session_no_btn]
+                )
+
+                # (5) 예 버튼 → 실제 세션 삭제
+                delete_session_yes_btn.click(
+                    fn=main_tab.delete_session,
+                    inputs=[existing_sessions_dropdown, session_id_state],
+                    outputs=[session_manage_info, delete_session_confirm_msg, existing_sessions_dropdown]
+                ).then(
+                    fn=lambda: (gr.update(visible=False), gr.update(visible=False)),
+                    inputs=[],
+                    outputs=[delete_session_yes_btn, delete_session_no_btn]
+                )
+
+                # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기
+                delete_session_no_btn.click(
+                    fn=lambda: (
+                        "❌ 삭제가 취소되었습니다.",
+                        gr.update(value="", visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False)
+                    ),
+                    inputs=[],
+                    outputs=[session_manage_info, delete_session_confirm_msg, delete_session_yes_btn, delete_session_no_btn]
+                )
+            with gr.Tab("장치 설정"):
+                device_dropdown = gr.Dropdown(
+                    label="사용할 장치 선택",
+                    choices=["Auto (Recommended)", "CPU", "GPU"],
+                    value="Auto (Recommended)",
+                    info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
+                )
+                device_info = gr.Textbox(
+                    label="장치 정보",
+                    value=f"현재 기본 장치: {default_device.upper()}",
+                    interactive=False
+                )
                 
-                try:
-                    conn = sqlite3.connect("chat_history.db")
-                    cursor = conn.cursor()
-                    # 삭제하기 전에 세션이 존재하는지 확인
-                    cursor.execute("SELECT COUNT(*) FROM chat_history WHERE session_id = ?", (chosen_sid,))
-                    count = cursor.fetchone()[0]
-                    if count == 0:
-                        return f"❌ 세션 '{chosen_sid}'이(가) DB에 존재하지 않습니다.", False, gr.update(visible=False)
-                    
-                    cursor.execute("DELETE FROM chat_history WHERE session_id = ?", (chosen_sid,))
-                    conn.commit()
-                    conn.close()
-                    logger.info(f"세션 삭제 완료: {chosen_sid}")
-                    return f"✅ 세션 '{chosen_sid}'이(가) 삭제되었습니다.", False, gr.update(visible=False)
-                except sqlite3.OperationalError as oe:
-                    logger.error(f"DB 운영 오류: {oe}")
-                    return f"❌ DB 운영 오류 발생: {oe}", False, gr.update(visible=False)
-                except Exception as e:
-                    logger.error(f"세션 삭제 오류: {e}")
-                    return f"❌ 세션 삭제 실패: {e}", False, gr.update(visible=False)
-            
-            # 버튼 이벤트 연결
-            def initiate_delete():
-                return gr.update(visible=True), gr.update(visible=True)
-            
-            # 삭제 확인 버튼 클릭 시 실제 삭제 수행
-            def confirm_delete(chosen_sid, current_sid, confirm):
-                if not confirm:
-                    return "❌ 삭제가 취소되었습니다.", False, gr.update(visible=False)
-                return delete_session(chosen_sid, current_sid)
-    
-            refresh_sessions_btn.click(
-                fn=refresh_sessions,
-                inputs=[],
-                outputs=[existing_sessions_dropdown, session_manage_info]
-            )
-            
-            create_new_session_btn.click(
-                fn=create_new_session,
-                inputs=[],
-                outputs=[session_id_state, session_manage_info]
-            ).then(
-                fn=lambda: [],  # 새 세션 생성 시 히스토리 초기화
-                inputs=[],
-                outputs=[history_state]
-            ).then(
-                fn=main_tab.filter_messages_for_chatbot,  # 초기화된 히스토리를 Chatbot에 반영
-                inputs=[history_state],
-                outputs=[chatbot]
-            )
-            
-            apply_session_btn.click(
-                fn=apply_session,
-                inputs=[existing_sessions_dropdown],
-                outputs=[history_state, session_id_state, session_manage_info]
-            ).then(
-                fn=main_tab.filter_messages_for_chatbot, # (2) 불러온 history를 Chatbot 형식으로 필터링
-                inputs=[history_state],
-                outputs=chatbot                 # (3) Chatbot 업데이트
-            )
-            
-            # 세션 삭제 버튼 클릭 시 확인 메시지 표시
-            with gr.Row(visible=False) as delete_session_confirm_row:
-                delete_session_confirm_msg = gr.Markdown("⚠️ **정말로 선택한 세션을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.**")
-                delete_session_yes_btn = gr.Button("✅ 예", variant="danger")
-                delete_session_no_btn = gr.Button("❌ 아니요", variant="secondary")
-    
-            # 세션 삭제 버튼 클릭 시 확인 메시지 표시
-            delete_session_btn.click(
-                fn=lambda name: (f"⚠️ 정말로 세션 '{name}'을(를) 삭제하시겠습니까?", gr.update(visible=True)),
-                inputs=[existing_sessions_dropdown],
-                outputs=[delete_session_confirm_row]
-            )
-            
-            # 세션 삭제 확인 버튼 클릭 시 실제 삭제 수행
-            delete_session_yes_btn.click(
-                fn=delete_session,
-                inputs=[existing_sessions_dropdown, session_id_state],
-                outputs=[session_manage_info, gr.update(visible=False), existing_sessions_dropdown]
-            )
-    
-            # 세션 삭제 취소 버튼 클릭 시 확인 메시지 숨김
-            delete_session_no_btn.click(
-                fn=lambda: ("❌ 삭제가 취소되었습니다.", gr.update(visible=False)),
-                inputs=[],
-                outputs=[session_manage_info, gr.update(visible=False)]
-            )
-        with gr.Accordion("장치 설정", open=False):
-            device_dropdown = gr.Dropdown(
-                label="사용할 장치 선택",
-                choices=["Auto (Recommended)", "CPU", "GPU"],
-                value="Auto (Recommended)",
-                info="자동 설정을 사용하면 시스템에 따라 최적의 장치를 선택합니다."
-            )
-            device_info = gr.Textbox(
-                label="장치 정보",
-                value=f"현재 기본 장치: {default_device.upper()}",
-                interactive=False
-            )
-            
-            device_dropdown.change(
-                fn=set_device,
-                inputs=[device_dropdown],
-                outputs=[device_info, gr.State(default_device)],
-                queue=False
-            )
+                device_dropdown.change(
+                    fn=set_device,
+                    inputs=[device_dropdown],
+                    outputs=[device_info, gr.State(default_device)],
+                    queue=False
+                )
             
     with gr.Tab("SD Prompt 생성"):
         gr.Markdown("# Stable Diffusion 프롬프트 생성기")

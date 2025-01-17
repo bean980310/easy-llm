@@ -1,9 +1,11 @@
 import logging
 import gradio as gr
 import os
+import secrets
+import sqlite3
 
 from models import get_all_local_models, generate_answer
-from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets
+from database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
 from translations import detect_system_language, TranslationManager, translation_manager
 
 from src.preset_images import PRESET_IMAGES
@@ -289,6 +291,63 @@ class MainTab:
             language = self.default_language
         presets = get_preset_choices(language)
         return gr.update(choices=presets, value=presets[0] if presets else None)
+    
+    def refresh_sessions(self):
+        """
+        세션 목록을 갱신하고, (Dropdown) choices를 반환합니다.
+        """
+        sessions = get_existing_sessions()
+        if not sessions:
+            return gr.update(choices=[], value=None), "DB에 세션이 없습니다."
+        return gr.update(choices=sessions, value=sessions[0]), "세션 목록을 불러왔습니다."
+
+    def create_new_session(self, system_message_box_value: str):
+        """
+        새 세션을 생성하고 DB에 기본 system_message를 저장합니다.
+        """
+        new_sid = secrets.token_hex(8)
+        system_message = {
+            "role": "system",
+            "content": system_message_box_value
+        }
+        # DB에 저장
+        save_chat_history_db([system_message], session_id=new_sid)
+        return new_sid, f"새 세션 생성: {new_sid}"
+
+    def apply_session(self, chosen_sid: str):
+        """
+        선택된 세션의 히스토리를 불러오고, session_id_state를 갱신.
+        """
+        if not chosen_sid:
+            return [], None, "세션 ID를 선택하세요."
+        loaded_history = load_chat_from_db(chosen_sid)
+        return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
+
+    def delete_session(self, chosen_sid: str, current_sid: str):
+        """
+        특정 세션 삭제 로직
+        """
+        if not chosen_sid:
+            return "❌ 삭제할 세션을 선택하세요.", gr.update(value="", visible=False), gr.update()
+        if chosen_sid == current_sid:
+            return f"❌ 현재 활성 세션 '{chosen_sid}'은(는) 삭제할 수 없습니다.", gr.update(value="", visible=False), gr.update()
+        # DB에서 삭제
+        try:
+            conn = sqlite3.connect("chat_history.db")
+            c = conn.cursor()
+            c.execute("DELETE FROM chat_history WHERE session_id = ?", (chosen_sid,))
+            conn.commit()
+            conn.close()
+
+            sessions = get_existing_sessions()
+            return (
+                f"✅ 세션 '{chosen_sid}'이(가) 삭제되었습니다.",
+                gr.update(value="", visible=False),  # 메시지나 UI 숨김
+                gr.update(choices=sessions, value=sessions[0] if sessions else None)
+            )
+        except Exception as e:
+            logger.error(f"세션 삭제 오류: {e}")
+            return f"❌ 세션 삭제 실패: {e}", gr.update(value="", visible=False), gr.update()
 
     def initial_load_presets(self, language=None):
         """초기 프리셋 로딩 함수"""
