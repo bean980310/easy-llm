@@ -19,4 +19,4 @@ def detect_system_language() -> str:
     except Exception as e:
         logger.error(f"Error detecting system language: {e}")
     
-    return 'ko'
+    return 'en'
