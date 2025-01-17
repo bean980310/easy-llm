@@ -7,3 +7,4 @@ __pycache__
 chat_history.db
 chat_history_backup.db
 translations/
+persona_state.db
