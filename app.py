@@ -1102,21 +1102,21 @@ with gr.Blocks() as demo:
                     inputs=[existing_sessions_dropdown, session_id_state],
                     outputs=[session_manage_info, delete_session_confirm_msg, existing_sessions_dropdown]
                 ).then(
-                    fn=lambda: (gr.update(visible=False), gr.update(visible=False)),
+                    fn=lambda: (gr.update(visible=False)),
                     inputs=[],
-                    outputs=[delete_session_yes_btn, delete_session_no_btn]
+                    outputs=[delete_session_confirm_row],
+                    queue=False
                 )
 
                 # “아니요” 버튼: “취소되었습니다” 메시지 + 문구/버튼 숨기기
                 delete_session_no_btn.click(
                     fn=lambda: (
                         "❌ 삭제가 취소되었습니다.",
-                        gr.update(value="", visible=False),
-                        gr.update(visible=False),
                         gr.update(visible=False)
                     ),
                     inputs=[],
-                    outputs=[session_manage_info, delete_session_confirm_msg, delete_session_yes_btn, delete_session_no_btn]
+                    outputs=[session_manage_info, delete_session_confirm_row],
+                    queue=False
                 )
             with gr.Tab("장치 설정"):
                 device_dropdown = gr.Dropdown(
