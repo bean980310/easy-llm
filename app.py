@@ -42,6 +42,7 @@ from tabs.main_tab import (
 from tabs.cache_tab import create_cache_tab
 from tabs.download_tab import create_download_tab
 from tabs.util_tab import create_util_tab
+from tabs.setting_tab_custom_model import create_custom_model_tab
 from tabs.setting_tab_preset import create_system_preset_management_tab
 from tabs.device_setting import set_device
 
@@ -806,22 +807,7 @@ with gr.Blocks(css=css) as demo:
 
         with gr.Tabs():
             # 사용자 지정 모델 경로 설정 섹션
-            with gr.Tab("사용자 지정 모델 경로 설정"):
-                custom_path_text = gr.Textbox(
-                    label="사용자 지정 모델 경로",
-                    placeholder="./models/custom-model",
-                )
-                apply_custom_path_btn = gr.Button("경로 적용")
-
-                # custom_path_text -> custom_model_path_state 저장
-                def update_custom_path(path):
-                    return path
-
-                apply_custom_path_btn.click(
-                    fn=update_custom_path,
-                    inputs=[custom_path_text],
-                    outputs=[custom_model_path_state]
-                )
+            create_custom_model_tab(custom_model_path_state)
 
             # 시스템 메시지 프리셋 관리 섹션 추가
             with gr.Tab("시스템 메시지 프리셋 관리"):
