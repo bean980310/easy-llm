@@ -2,6 +2,7 @@ import torch
 import platform
 import logging
 import gradio as gr
+from typing import Tuple
 
 from common.models import get_default_device
 
@@ -33,7 +34,7 @@ def set_device(selection):
     logger.info(device_info_message)
     return gr.update(value=device_info_message), device
 
-def create_device_setting_tab(default_device):
+def create_device_setting_tab(default_device)->Tuple[gr.Tab, gr.Dropdown]:
     with gr.Tab("장치 설정"):
         device_dropdown = gr.Dropdown(
             label="사용할 장치 선택",
