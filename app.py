@@ -44,7 +44,7 @@ from src.main_tab import (
     generator_choices,
     characters,
     get_speech_manager,
-    update_system_message_and_profile
+    update_system_message_and_profile,
 )
 from src.download_tab import create_download_tab
 from src.setting_tab_preset import on_add_preset_click, apply_preset
@@ -162,6 +162,26 @@ def update_presets_on_start(presets_dir: str):
             else:
                 logger.warning(f"프리셋 삭제 실패: {name} ({language}) - {message}")
                 
+def get_last_used_session():
+    try:
+        with sqlite3.connect("chat_history.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id
+                FROM sessions
+                WHERE last_activity IS NOT NULL
+                ORDER BY last_activity DESC
+                LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            else:
+                return None
+    except Exception as e:
+        logger.error(f"마지막 사용 세션 조회 오류: {e}")
+        return None
+                
 ##########################################
 # 3) Gradio UI
 ##########################################
@@ -183,8 +203,15 @@ def on_app_start(language=None):  # language 매개변수에 기본값 설정
     if language is None:
         language = default_language
         
-    sid = "demo_session"
-    logger.info(f"앱 시작 시 세션 ID: {sid}")
+    # (1) 마지막으로 사용된 세션 ID 조회
+    last_sid = get_last_used_session()
+    if last_sid:
+        sid = last_sid
+        logger.info(f"마지막 사용 세션: {sid}")
+    else:
+        sid = "demo_session"
+        logger.info("마지막 사용 세션이 없어 demo_session 사용")
+        
     loaded_history = load_chat_from_db(sid)
     logger.info(f"앱 시작 시 불러온 히스토리: {loaded_history}")
     
@@ -280,11 +307,15 @@ def parse_args():
 
 args=parse_args()
 
+refresh_session_list=main_tab.refresh_sessions()
+
 with gr.Blocks() as demo:
     speech_manager_state = gr.State(initialize_speech_manager)
     
     session_id, loaded_history, session_dropdown, session_label=on_app_start()
+    last_sid_state=gr.State()
     history_state = gr.State(loaded_history)
+    session_list_state = gr.State()
     overwrite_state = gr.State(False) 
 
     # 단일 history_state와 selected_device_state 정의 (중복 제거)
@@ -344,6 +375,29 @@ with gr.Blocks() as demo:
             visible=False  # 기본적으로 숨김
         )
         image_info = gr.Markdown("", visible=False)
+        with gr.Row():
+            # (예시) "세션 선택" Dropdown 추가
+            session_select_dropdown = gr.Dropdown(
+                label="세션 선택",
+                choices=[],  # 앱 시작 시 혹은 별도의 로직으로 세션 목록을 채움
+                value=None,
+                interactive=True
+            )
+
+            session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
+
+        # 아래는 변경 이벤트 등록
+        def apply_session_immediately(chosen_sid):
+            """
+            메인탭에서 세션이 선택되면 바로 main_tab.apply_session을 호출해 세션 적용.
+            """
+            return main_tab.apply_session(chosen_sid)
+
+        def init_session_dropdown(sessions):
+            if not sessions:
+                return gr.update(choices=[], value=None)
+            return gr.update(choices=sessions, value=sessions[0])
+        
         with gr.Column():
             preset_dropdown = gr.Dropdown(
                 label="프리셋 선택",
@@ -675,6 +729,24 @@ with gr.Blocks() as demo:
             outputs=[reset_all_confirm_row],
             queue=False
         )
+        
+        demo.load(
+            fn=init_session_dropdown,  # 또는 main_tab의 다른 메서드
+            inputs=[session_list_state],
+            outputs=[session_select_dropdown],
+            queue=False
+        )
+        
+        session_select_dropdown.change(
+            fn=apply_session_immediately,
+            inputs=[session_select_dropdown],
+            outputs=[history_state, session_id_state, session_select_info]
+        ).then(
+            fn=main_tab.filter_messages_for_chatbot,
+            inputs=[history_state],
+            outputs=[chatbot]
+        )
+        
             
     create_download_tab()
         

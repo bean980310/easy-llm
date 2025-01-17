@@ -321,6 +321,16 @@ class MainTab:
         if not chosen_sid:
             return [], None, "세션 ID를 선택하세요."
         loaded_history = load_chat_from_db(chosen_sid)
+        # last_activity 갱신
+        with sqlite3.connect("chat_history.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE sessions
+                SET last_activity = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (chosen_sid,))
+            conn.commit()
+            
         return loaded_history, chosen_sid, f"세션 {chosen_sid}이 적용되었습니다."
 
     def delete_session(self, chosen_sid: str, current_sid: str):
