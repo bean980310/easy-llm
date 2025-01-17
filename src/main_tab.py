@@ -34,7 +34,7 @@ characters={
         "default_tone": "존댓말",
         "languages": ["ko", "ja", "zh_CN", "zh_TW", "en"],
         "preset_name": "AI_ASSISTANT_PRESET",
-        "profile_image": "assets0_ai_assistant.png"
+        "profile_image": "assets/0_ai_assistant.png"
     },
     "미나미 아스카": {
         "default_tone": "반말", 
