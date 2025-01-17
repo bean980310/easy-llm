@@ -2,7 +2,7 @@ import gradio as gr
 from common.translations import _, translation_manager
 from common.models import get_all_local_models
 from common.utils import clear_all_model_cache
-from main_tab import MainTab
+from tabs.main_tab import MainTab
 import logging
 
 main_tab=MainTab()
