@@ -82,9 +82,10 @@ default_language = detect_system_language()
 
 main_tab=MainTab()
 
-speech_manager=PersonaSpeechManager(translation_manager, characters)
+def initialize_speech_manager():
+    return PersonaSpeechManager(translation_manager, characters)
 
-def handle_character_change(selected_character, language):
+def handle_character_change(selected_character, language, speech_manager: PersonaSpeechManager):
     try:
         speech_manager.set_character_and_language(selected_character, language)
         system_message = speech_manager.get_system_message()
@@ -223,8 +224,8 @@ def on_character_and_language_select(character_name, language):
     - 시스템 메시지 프리셋 업데이트
     """
     try:
-        speech_manager.set_character_and_language(character_name, language)
-        system_message = speech_manager.get_system_message()
+        speech_manager_state.set_character_and_language(character_name, language)
+        system_message = speech_manager_state.get_system_message()
         return system_message
     except ValueError as ve:
         logger.error(f"Character setting error: {ve}")
@@ -280,6 +281,8 @@ def parse_args():
 args=parse_args()
 
 with gr.Blocks() as demo:
+    speech_manager_state = gr.State(initialize_speech_manager)
+    
     session_id, loaded_history, session_dropdown, session_label=on_app_start()
     history_state = gr.State(loaded_history)
     overwrite_state = gr.State(False) 
@@ -411,7 +414,7 @@ with gr.Blocks() as demo:
             
             character_dropdown.change(
                 fn=update_system_message_and_profile,
-                inputs=[character_dropdown, language_dropdown],
+                inputs=[character_dropdown, language_dropdown, speech_manager_state],
                 outputs=[system_message_box, profile_image]
             )
             
@@ -482,9 +485,9 @@ with gr.Blocks() as demo:
             lang_code = lang_map.get(selected_lang, "ko")
             if translation_manager.set_language(lang_code):
                 if selected_lang in characters[selected_character]["languages"]:
-                    speech_manager.current_language = selected_lang
+                    speech_manager_state.current_language = selected_lang
                 else:
-                    speech_manager.current_language = characters[selected_character]["languages"][0]
+                    speech_manager_state.current_language = characters[selected_character]["languages"][0]
                 system_presets = load_system_presets(lang_code)
                 
                 if len(system_presets) > 0:
@@ -1270,7 +1273,7 @@ with gr.Blocks() as demo:
         
     demo.load(
         fn=on_app_start,
-        inputs=[selected_language_state],  # 언어 상태를 입력으로 전달
+        inputs=[], # 언어 상태는 이미 초기화됨
         outputs=[session_id_state, history_state, existing_sessions_dropdown,
         current_session_display],
         queue=False
@@ -1280,6 +1283,5 @@ if __name__=="__main__":
     
     initialize_app()
     translation_manager.current_language=args.language
-    speech_manager = PersonaSpeechManager(translation_manager, characters)
     
     demo.queue().launch(debug=args.debug, share=args.share, inbrowser=args.inbrowser, server_port=args.port, width=800)

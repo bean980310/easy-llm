@@ -380,7 +380,7 @@ class MainTab:
         updated_list = sorted(list(dict.fromkeys(updated_list)))
         return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
     
-def update_system_message_and_profile(character_name, language_display_name):
+def update_system_message_and_profile(character_name, language_display_name, speech_manager: PersonaSpeechManager):
     """
     캐릭터와 언어 선택 시 호출되는 함수.
     - 캐릭터와 언어 설정 적용
@@ -391,7 +391,7 @@ def update_system_message_and_profile(character_name, language_display_name):
         speech_manager.set_character_and_language(character_name, language_code)
         # presets = load_system_presets(language=language_code)
         system_message = speech_manager.get_system_message()
-        selected_profile_image = characters[character_name]["profile_image"]
+        selected_profile_image = speech_manager.characters[character_name]["profile_image"]
         
         return system_message, selected_profile_image
     except ValueError as ve:

@@ -2,13 +2,14 @@
 import logging
 from typing import Dict
 from database import load_system_presets
+import sqlite3
 
 import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class PersonaSpeechManager:
-    def __init__(self, translation_manager, characters: Dict[str, Dict[str, str]]):
+    def __init__(self, translation_manager, characters: Dict[str, Dict[str, str]], db_path='persona_state.db'):
         """
         :param characters: 캐릭터 이름을 키로 하고, 각 캐릭터의 설정을 값으로 가지는 딕셔너리
                            예: {
@@ -17,12 +18,16 @@ class PersonaSpeechManager:
                                "영어친구": {"default_tone": "casual", "languages": "en"}
                            }
         """
+        logging.info("PersonaSpeechManager 인스턴스가 생성되었습니다.")
         self.translation_manager = translation_manager
         self.characters = characters
         self.current_character = None  # 현재 선택된 캐릭터
         self.current_language = None
         self.current_system_preset = None
         self.current_tone = None
+        self.db_path = db_path
+        self._initialize_db()
+
     
     def set_character_and_language(self, character_name: str, language: str):
         if character_name in self.characters:
@@ -98,6 +103,7 @@ class PersonaSpeechManager:
         """
         설정된 말투와 언어에 따라 응답을 생성
         """
+        logger.info(f"Generating response with content: {content}")
         if not self.current_character:
             raise ValueError("캐릭터가 설정되지 않았습니다.")
 
@@ -161,6 +167,11 @@ class PersonaSpeechManager:
         content = re.sub(r'\b주세요\b', '줘', content)
         content = re.sub(r'\b줘요\b', '줘', content)
         content = re.sub(r'\b죠\b', '지', content)
+        content = re.sub(r'\b싶어요\b', '싶어', content)
+        content = re.sub(r'\b요\b', '', content)
+        content = re.sub(r'반가워요\b', '반가워', content)
+        content = re.sub(r'계신가요\b', '있어?', content)
+        content = re.sub(r'있으신가요\b', '있어?', content)
         return content.strip()
 
 
@@ -316,3 +327,46 @@ class PersonaSpeechManager:
         """
         self.update_tone(user_input)
         return self.generate_response(base_response)
+    
+    def _initialize_db(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS persona_state (
+                session_id TEXT PRIMARY KEY,
+                current_character TEXT,
+                current_language TEXT,
+                current_tone TEXT,
+                current_system_preset TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
+
+    def save_state(self, session_id: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO persona_state (session_id, current_character, current_language, current_tone, current_system_preset)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                current_character=excluded.current_character,
+                current_language=excluded.current_language,
+                current_tone=excluded.current_tone,
+                current_system_preset=excluded.current_system_preset
+        ''', (session_id, self.current_character, self.current_language, self.current_tone, self.current_system_preset))
+        conn.commit()
+        conn.close()
+        logger.info(f"세션 {session_id}의 상태가 데이터베이스에 저장되었습니다.")
+
+    def load_state(self, session_id: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_character, current_language, current_tone, current_system_preset FROM persona_state WHERE session_id = ?', (session_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            self.current_character, self.current_language, self.current_tone, self.current_system_preset = row
+            logger.info(f"세션 {session_id}의 상태가 데이터베이스에서 로드되었습니다.")
+        else:
+            logger.warning(f"세션 {session_id}의 상태를 데이터베이스에서 찾을 수 없습니다.")
