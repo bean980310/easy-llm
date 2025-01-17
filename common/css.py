@@ -249,4 +249,24 @@ css="""
     background: rgba(0,0,0,0.5);
     z-index: -1;
 }
+.confirm-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1100;  /* settings-popup보다 더 위에 표시 */
+    width: 400px;
+    text-align: center;
+}
+
+.confirm-dialog .buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+}
 """

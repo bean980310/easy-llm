@@ -1140,6 +1140,16 @@ with gr.Blocks(css=css) as demo:
                     inputs=[user_input_sd, selected_model_sd, model_type_sd, custom_model_path_sd, api_key_sd],
                     outputs=prompt_output_sd
                 )
+        with gr.Row(elem_classes="popup-footer"):
+            cancel_btn = gr.Button("Cancel", variant="secondary")
+            save_settings_btn = gr.Button("Save Changes", variant="primary")
+            
+        with gr.Column(visible=False, elem_classes="confirm-dialog") as save_confirm_dialog:
+            gr.Markdown("### Save Changes?")
+            gr.Markdown("Do you want to save the changes you made?")
+            with gr.Row():
+                confirm_no_btn = gr.Button("No", variant="secondary")
+                confirm_yes_btn = gr.Button("Yes", variant="primary")
         
     # 팝업 동작을 위한 이벤트 핸들러 추가
     def toggle_settings_popup():
@@ -1157,7 +1167,80 @@ with gr.Blocks(css=css) as demo:
         fn=close_settings_popup,
         outputs=settings_popup
     )
+    def handle_escape_key(evt: gr.SelectData):
+        """ESC 키를 누르면 팝업을 닫는 함수"""
+        if evt.key == "Escape":
+            return gr.update(visible=False)
+
+    # 키보드 이벤트 리스너 추가
+    demo.load(None, None, None).then(
+        fn=handle_escape_key,
+        inputs=[],
+        outputs=[settings_popup]
+    )
+
+    # 설정 변경 시 저장 여부 확인
+    def save_settings():
+        """설정 저장 함수"""
+        # 설정 저장 로직
+        return gr.update(visible=False)
+
+    def show_save_confirm():
+        """설정 저장 확인 다이얼로그 표시"""
+        return gr.update(visible=True)
     
+    def hide_save_confirm():
+        """저장 확인 다이얼로그 숨김"""
+        return gr.update(visible=False)
+    
+    def save_and_close():
+        """설정 저장 후 팝업 닫기"""
+        # 여기에 실제 설정 저장 로직 구현
+        return gr.update(visible=False), gr.update(visible=False) 
+    
+    # 이벤트 연결
+    save_settings_btn.click(
+        fn=show_save_confirm,
+        outputs=save_confirm_dialog
+    )
+
+    confirm_no_btn.click(
+        fn=hide_save_confirm,
+        outputs=save_confirm_dialog
+    )
+
+    confirm_yes_btn.click(
+        fn=save_and_close,
+        outputs=[save_confirm_dialog, settings_popup]
+    )
+
+    # 설정 변경 여부 추적을 위한 상태 변수 추가
+    settings_changed = gr.State(False)
+    
+    def update_settings_state():
+        """설정이 변경되었음을 표시"""
+        return True
+
+    # 설정 변경을 감지하여 상태 업데이트
+    for input_component in [model_type_dropdown, model_dropdown, device_dropdown, preset_dropdown, system_message_box]:
+        input_component.change(
+            fn=update_settings_state,
+            outputs=settings_changed
+        )
+
+    # 취소 버튼 클릭 시 변경사항 확인
+    def handle_cancel(changed):
+        """취소 버튼 처리"""
+        if changed:
+            return gr.update(visible=True)  # 변경사항이 있으면 확인 다이얼로그 표시
+        return gr.update(visible=False), gr.update(visible=False)  # 변경사항이 없으면 바로 닫기
+
+    cancel_btn.click(
+        fn=handle_cancel,
+        inputs=[settings_changed],
+        outputs=[save_confirm_dialog, settings_popup]
+    )
+        
     demo.load(
         fn=on_app_start,
         inputs=[], # 언어 상태는 이미 초기화됨
