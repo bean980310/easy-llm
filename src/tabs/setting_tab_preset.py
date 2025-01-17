@@ -3,7 +3,7 @@ from src.common.database import preset_exists, handle_add_preset, load_system_pr
 from src.tabs.main_tab import MainTab
 import logging
 
-from src.common.preset_images import PRESET_IMAGES
+from src.characters.preset_images import PRESET_IMAGES
 
 main_tab=MainTab()
 

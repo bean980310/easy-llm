@@ -1,8 +1,8 @@
 import gradio as gr
-from src.common.models import generate_stable_diffusion_prompt_cached
+from src.models.models import generate_stable_diffusion_prompt_cached
 from src.tabs.main_tab import generator_choices
-from src.common.api_models import api_models
-from src.common.local_models import transformers_local, gguf_local, mlx_local
+from src.models.api_models import api_models
+from src.models.local_models import transformers_local, gguf_local, mlx_local
 
 def create_sd_prompt_generator_tab():
     with gr.Tab("SD Prompt 생성"):

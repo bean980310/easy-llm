@@ -6,8 +6,8 @@ import gradio as gr
 from huggingface_hub import HfApi
 
 from src.tabs.main_tab import MainTab
-from src.common.api_models import api_models
-from src.common.known_hf_models import known_hf_models
+from src.models.api_models import api_models
+from src.models.known_hf_models import known_hf_models
 
 from src.common.utils import download_model_from_hf, make_local_dir_name, get_all_local_models
 

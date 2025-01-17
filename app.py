@@ -18,10 +18,10 @@ from src.common.database import (
     get_existing_sessions, 
     get_preset_choices,
     insert_default_presets)
-from src.common.models import default_device
+from src.models.models import default_device
 from src.common.cache import models_cache
 from src.common.translations import translation_manager, _, TranslationManager
-from src.common.persona_speech_manager import PersonaSpeechManager
+from src.characters.persona_speech_manager import PersonaSpeechManager
 from src.common.args import parse_args
 from src.common.default_language import default_language
 
