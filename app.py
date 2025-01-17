@@ -363,8 +363,9 @@ with gr.Blocks(css="style.css") as demo:
                 value=None,
                 interactive=True
             )
-            add_session_icon_btn = gr.Button("📝", elem_id="add_session_btn", variant="secondary")
-            delete_session_icon_btn = gr.Button("🗑️", elem_id="delete_session_btn", variant="stop")
+            with gr.Column():
+                add_session_icon_btn = gr.Button("📝", elem_id="add_session_btn", scale=1, variant="secondary")
+                delete_session_icon_btn = gr.Button("🗑️", elem_id="delete_session_btn", scale=1, variant="stop")
             session_select_info = gr.Markdown("선택된 세션이 표시됩니다.")
 
         with gr.Row():
