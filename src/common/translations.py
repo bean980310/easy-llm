@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import logging
-from presets import MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
+from presets import AI_ASSISTANT_PRESET, MINAMI_ASUKA_PRESET, MAKOTONO_AOI_PRESET, AINO_KOITO_PRESET
 
 from src.common.default_language import default_language
 
@@ -22,6 +22,7 @@ class TranslationManager:
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
         self.character_settings: Dict[str, Dict[str, str]] = {
+            'ai_assistant': AI_ASSISTANT_PRESET,
             'minami_asuka': MINAMI_ASUKA_PRESET,
             'makotono_aoi': MAKOTONO_AOI_PRESET,
             'aino_koito': AINO_KOITO_PRESET
@@ -508,6 +509,7 @@ class TranslationManager:
         }
         
         default_presets = {
+            'AI_ASSISTANT': AI_ASSISTANT_PRESET,
             'MINAMI_ASUKA': MINAMI_ASUKA_PRESET,
             'MAKOTONO_AOI': MAKOTONO_AOI_PRESET,
             'AINO_KOITO': AINO_KOITO_PRESET

@@ -54,6 +54,7 @@ class SessionManagementError(Exception):
 
 
 DEFAULT_PRESETS = frozenset([
+    'AI_ASSISTANT_PRESET',
     'MINAMI_ASUKA_PRESET',
     'MAKOTONO_AOI_PRESET',
     'AINO_KOITO_PRESET'
@@ -245,6 +246,7 @@ def insert_default_presets(translation_manager, overwrite=True) -> None:
     """
     # 프리셋 설정 정의
     preset_configs = [
+        PresetConfig("AI_ASSISTANT_PRESET", "ai_assistant"),
         PresetConfig("MINAMI_ASUKA_PRESET", "minami_asuka"),
         PresetConfig("MAKOTONO_AOI_PRESET", "makotono_aoi"),
         PresetConfig("AINO_KOITO_PRESET", "aino_koito")
