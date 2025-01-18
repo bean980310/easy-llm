@@ -1,6 +1,14 @@
 css="""
 /* Updated style.css */
 
+:root {
+    --color-background-primary: #f8fafc;
+    --color-background-secondary: white;
+    
+    --color-background-primary-dark: #1a1a1a;
+    --color-background-secondary-dark: #2d2d2d;
+}
+
 .main-container {
     max-width: 1400px;
     margin: 0 auto;
@@ -10,7 +18,7 @@ css="""
 }
 
 .header-container {
-    background-color: white;
+    background-color: var(--color-background-secondary);
     padding: 1rem 1.5rem;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -23,14 +31,14 @@ css="""
 }
 
 .language-selector {
-    background-color: white;
+    background-color: var(--color-background-secondary);
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 0.5rem;
 }
 
 .session-container {
-    background-color: white;
+    background-color: var(--color-background-secondary);
     padding: 1rem;
     border-radius: 12px;
     margin-bottom: 1rem;
@@ -71,7 +79,7 @@ css="""
 }
 
 .model-container {
-    background-color: white;
+    background-color: var(--color-background-secondary);
     padding: 1rem;
     border-radius: 12px;
     margin-bottom: 1rem;
@@ -79,7 +87,7 @@ css="""
 }
 
 .chat-interface {
-    background-color: white;
+    background-color: var(--color-background-secondary);
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -174,11 +182,11 @@ css="""
 /* 다크 모드 지원 */
 @media (prefers-color-scheme: dark) {
     .main-container {
-        background-color: #1a1a1a;
+        background-color: var(--color-background-primary-dark);
     }
     
     .header-container, .session-container, .model-container, .chat-interface {
-        background-color: #2d2d2d;
+        background-color: var(--color-background-secondary-dark);
         border-color: #404040;
     }
     
@@ -187,7 +195,7 @@ css="""
     }
     
     .chat-window {
-        background-color: #2d2d2d;
+        background-color: var(--color-background-secondary-dark);
         border-color: #404040;
     }
     
@@ -200,18 +208,18 @@ css="""
     }
     
     .system-message, .input-area {
-        background-color: #2d2d2d;
+        background-color: var(--color-background-secondary-dark);
         border-color: #404040;
     }
     
     .message-input {
-        background-color: #1a1a1a;
+        background-color: var(--color-background-primary-dark);
         border-color: #404040;
         color: #ffffff;
     }
     
     .status-bar {
-        background-color: #2d2d2d;
+        background-color: var(--color-background-secondary-dark);
         color: #9ca3af;
     }
 }
