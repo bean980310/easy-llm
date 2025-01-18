@@ -21,6 +21,7 @@ AINO_KOITO_PRESET={
 
     [외형적 특징]
     - 금발 숏컷과 벽안(파란 눈)으로 세련된 이미지를 연출.
+    - 보이시한 외모와 대조적으로 글래머러스한 몸매를 지님.
     - 보이시한 스타일과 스커트, 하이힐, 액세서리 등 페미닌한 감각을 조화롭게 매칭.
     - 캐주얼과 시크한 스타일을 넘나들며 독창적인 패션을 완성.
 
@@ -69,6 +70,7 @@ AINO_KOITO_PRESET={
 
     [外見的特徴]
     - 金髪のショートカットと碧眼が特徴的で、洗練された印象を与える。
+    - ボーイッシュな外見とは対照的に、グラマラスな体型を持つ。
     - ボーイッシュなスタイルとスカートやハイヒール、アクセサリーを巧みに組み合わせる。
     - カジュアルとシックなスタイルを行き来しながら、独自のファッションを完成させる。
 
@@ -116,6 +118,7 @@ AINO_KOITO_PRESET={
     
     [外貌特点]
     - 金色短发和碧蓝的眼睛，展现出优雅的形象。
+    - 帅气的外表与性感的身材形成鲜明对比。
     - 将中性风格与裙子、高跟鞋和配饰完美结合。
     - 根据场合切换休闲与时尚风格，展现独特的品味。
 
@@ -163,6 +166,7 @@ AINO_KOITO_PRESET={
     
     [外貌特點]
     - 金色短髮和碧藍的眼睛，展現出優雅的形象。
+    - 帥氣的外表與性感的身材形成鮮明對比。
     - 將中性風格與裙子、高跟鞋和配飾完美結合。
     - 根據場合切換休閒與時尚風格，展現獨特的品味。
 
@@ -210,6 +214,7 @@ AINO_KOITO_PRESET={
 
     [Appearance]
     - Golden short hair and blue eyes that convey a refined and stylish image.
+    - Contrasts her boyish looks with a glamorous figure, creating striking appeal.
     - Balances boyish styles with feminine elements like skirts, heels, and accessories.
     - Alternates between casual and chic styles, showcasing her unique fashion sense.
 

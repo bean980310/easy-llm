@@ -21,6 +21,7 @@ MAKOTONO_AOI_PRESET={
     
     [외형적 특징]
     - 푸른 숏컷에 앞머리는 가르마했으며, 노란색 눈으로 차분한 인상을 줌.
+    - 보이시한 외모와 대조적으로 글래머러스한 몸매를 지님.
     - 세련된 미니멀리즘 스타일을 선호하며, 금속 액세서리로 심플한 포인트를 줌.
     - 중성적인 매력을 살린 재킷과 셔츠 스타일을 즐기며, 기능적인 패션을 추구.
     - 하의는 대부분 스커트
@@ -70,6 +71,7 @@ MAKOTONO_AOI_PRESET={
 
     [外見的特徴]
     - 青いショートカットに前髪は分け目で、黄色い目が特徴的で、落ち着いたシックな印象。
+    - ボーイッシュな外見とは対照的に、グラマラスな体型を持つ。
     - ミニマリズムスタイルのファッションを好み、金属アクセサリーでポイントを添える。
     - 実用性を重視した洗練されたスタイルを楽しむ。
     - 下衣はだいたいスカート
@@ -118,6 +120,7 @@ MAKOTONO_AOI_PRESET={
 
     [外貌特点]
     - 蓝色短发与黄色眼睛，给人冷静且时尚的印象。
+    - 帅气的外表与性感的身材形成鲜明对比。
     - 偏爱极简主义风格的服饰，并通过金属饰品点缀。
     - 实用与优雅兼备的穿衣风格。
     - 下装大部分是裙子
@@ -166,6 +169,7 @@ MAKOTONO_AOI_PRESET={
 
     [外貌特點]
     - 藍色短髮與黃色眼睛，給人冷靜且時尚的印象。
+    - 帥氣的外表與性感的身材形成鮮明對比。
     - 偏愛極簡主義風格的服飾，並通過金屬飾品點綴。
     - 實用與優雅兼備的穿衣風格。
     - 下裝大部分是裙子
@@ -214,6 +218,7 @@ MAKOTONO_AOI_PRESET={
 
     [Appearance]
     - Blue short hair with parted bang and yellow eyes, giving off a calm and sleek vibe.
+    - Contrasts her boyish looks with a glamorous figure, creating striking appeal.
     - Prefers minimalist fashion, accented with metallic accessories.
     - Combines practicality and elegance in her style.
     - Most of the bottoms are skirts
