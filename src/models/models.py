@@ -304,7 +304,7 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
             logger.info(f"[*] OpenAI API 요청: {messages}")
             
             try:
-                response = openai.ChatCompletion.create(
+                response = openai.chat.completions.create(
                     model=selected_model,
                     messages=messages,
                     temperature=0.7,
