@@ -311,7 +311,7 @@ with gr.Blocks(css=css) as demo:
             delete_session_icon_btn = gr.Button("🗑️", elem_classes="icon-button-delete", scale=1, variant="stop")
         
         with gr.Row(elem_classes="model-container"):
-            with gr.Column(scale=5):
+            with gr.Column(scale=7):
                 model_type_dropdown = gr.Radio(
                     label=_("model_type_label"),
                     choices=["all", "transformers", "gguf", "mlx"],
