@@ -10,8 +10,9 @@ torchaudio
 accelerate
 openai
 tiktoken
-vllm
+anthropic
 gguf
 llama-cpp-python
+vllm
 mlx
 mlx_lm
