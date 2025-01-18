@@ -51,6 +51,7 @@ from presets import __all__ as preset_modules
 import json
 
 from src.common.css import css
+from src.common.js import js
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -281,7 +282,7 @@ with gr.Blocks(css=css) as demo:
     initial_choices = list(dict.fromkeys(initial_choices))
     initial_choices = sorted(initial_choices)  # 정렬 추가
     
-    with gr.Column(elem_classes="container"):
+    with gr.Column(elem_classes="main-container"):
         with gr.Row(elem_classes="header-container"):
             with gr.Column(scale=3):
                 title = gr.Markdown(f"## {_('main_title')}", elem_classes="title")

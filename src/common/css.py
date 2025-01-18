@@ -43,21 +43,30 @@ css="""
     padding: 0.5rem;
 }
 
-.icon-button, .icon-button-delete {
+.icon-button {
     padding: 0.5rem;
     border-radius: 8px;
     border: none;
-    background-color: #f3f4f6;
+    background-color: #9ca3af;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.icon-button-delete {
+    padding: 0.5rem;
+    border-radius: 8px;
+    border: none;
+    background-color: #ef4444;
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .icon-button:hover {
-    background-color: #e5e7eb;
+    background-color: #4b5563;
 }
 
 .icon-button-delete:hover {
-    background-color: #fee2e2;
+    background-color: #7f1d1d;
     color: #dc2626;
 }
 
