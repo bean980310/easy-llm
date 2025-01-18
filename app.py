@@ -17,7 +17,8 @@ from src.common.database import (
     load_system_presets, 
     get_existing_sessions, 
     get_preset_choices,
-    insert_default_presets)
+    insert_default_presets,
+    update_system_message_in_db)
 from src.models.models import default_device
 from src.common.cache import models_cache
 from src.common.translations import translation_manager, _, TranslationManager
@@ -256,6 +257,21 @@ def on_character_and_language_select(character_name, language):
     except ValueError as ve:
         logger.error(f"Character setting error: {ve}")
         return "시스템 메시지 로딩 중 오류가 발생했습니다."
+    
+def on_character_change(chosen_character, session_id):
+    # 1) set_character_and_language
+    speech_manager = get_speech_manager(session_id)
+    speech_manager.set_character_and_language(chosen_character, speech_manager.current_language)
+
+    # 2) get updated system message
+    updated_system_msg = speech_manager.get_system_message()
+
+    # 3) system_message_box에 반영 (UI 갱신)
+    #    그리고 DB에 UPDATE
+    system_message_box.update(value=updated_system_msg)
+    update_system_message_in_db(session_id, updated_system_msg)
+
+    return updated_system_msg  # UI에 표시
 
 refresh_session_list=main_tab.refresh_sessions()
 
@@ -445,19 +461,35 @@ with gr.Blocks(css=css) as demo:
             return gr.update(choices=[], value=None)
         return gr.update(choices=sessions, value=sessions[0])
         
-    def create_session():
-        # 실제로는 main_tab.create_new_session(...) 같은 함수 호출
-        new_sid, info = main_tab.create_new_session(system_message_box.value)
+    def create_session(chosen_character, chosen_language, speech_manager_state):
+        """
+        현재 캐릭터/언어에 맞춰 시스템 메시지를 가져온 뒤,
+        새 세션을 생성합니다.
+        """
+        # 1) SpeechManager 인스턴스 획득
+        speech_manager = speech_manager_state  # 전역 gr.State로 관리 중인 persona_speech_manager
+
+        # 2) 캐릭터+언어를 설정하고 시스템 메시지 가져오기
+        speech_manager.set_character_and_language(chosen_character, chosen_language)
+        new_system_msg = speech_manager.get_system_message()
+
+        # 3) DB에 기록할 새 세션 만들기
+        new_sid, info = main_tab.create_new_session(new_system_msg)
+
         return new_sid, info
-        
+            
     add_session_icon_btn.click(
         fn=create_session,
-        inputs=[],
-        outputs=[]  # 필요하다면 session_id_state, session_select_dropdown 등 갱신
+        inputs=[
+            character_dropdown,    # chosen_character
+            selected_language_state,  # chosen_language
+            speech_manager_state     # persona_speech_manager
+        ],
+        outputs=[]  # create_session이 (new_sid, info)를 반환하므로, 필요하면 여기서 받음
     ).then(
         fn=main_tab.refresh_sessions,
         inputs=[],
-        outputs=[session_select_dropdown]  # 세션 목록 즉시 갱신
+        outputs=[session_select_dropdown]
     )
         
     def delete_selected_session(chosen_sid):
@@ -491,7 +523,7 @@ with gr.Blocks(css=css) as demo:
             
     character_dropdown.change(
         fn=update_system_message_and_profile,
-        inputs=[character_dropdown, language_dropdown, speech_manager_state],
+        inputs=[character_dropdown, language_dropdown, speech_manager_state, session_id_state],
         outputs=[system_message_box, profile_image]
     )
         

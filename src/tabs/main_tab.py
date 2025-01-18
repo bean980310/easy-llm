@@ -5,7 +5,7 @@ import secrets
 import sqlite3
 
 from src.models.models import get_all_local_models, generate_answer
-from src.common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db
+from src.common.database import save_chat_history_db, delete_session_history, delete_all_sessions, get_preset_choices, load_system_presets, get_existing_sessions, load_chat_from_db, update_system_message_in_db
 from src.common.translations import TranslationManager, translation_manager
 
 from src.characters.preset_images import PRESET_IMAGES
@@ -451,20 +451,34 @@ class MainTab:
         updated_list = sorted(list(dict.fromkeys(updated_list)))
         return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
     
-def update_system_message_and_profile(character_name, language_display_name, speech_manager: PersonaSpeechManager):
+def update_system_message_and_profile(
+    character_name: str, 
+    language_display_name: str, 
+    speech_manager: PersonaSpeechManager,
+    session_id: str
+):
     """
     캐릭터와 언어 선택 시 호출되는 함수.
     - 캐릭터와 언어 설정 적용
     - 시스템 메시지 프리셋 업데이트
+    - DB에 system 메시지를 저장/갱신
     """
     try:
         language_code = translation_manager.get_language_code(language_display_name)
         speech_manager.set_character_and_language(character_name, language_code)
-        # presets = load_system_presets(language=language_code)
+
+        # 실제 프리셋 로딩은 speech_manager 내부에서 처리
         system_message = speech_manager.get_system_message()
         selected_profile_image = speech_manager.characters[character_name]["profile_image"]
         
+        # -- DB 업데이트 로직 추가 --
+        # session_id가 유효하다면, 새 시스템 메시지를 DB에 반영
+        if session_id:
+            update_system_message_in_db(session_id, system_message)
+
         return system_message, selected_profile_image
     except ValueError as ve:
         logger.error(f"Character setting error: {ve}")
-        return "시스템 메시지 로딩 중 오류가 발생했습니다."
+        return "시스템 메시지 로딩 중 오류가 발생했습니다.", None
+    
+    

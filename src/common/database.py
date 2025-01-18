@@ -747,3 +747,27 @@ def delete_all_sessions() -> SessionResult:
         error_msg = f"Unexpected error deleting all sessions: {e}"
         logger.error(error_msg)
         return SessionResult(False, error_msg, 0)
+    
+def update_system_message_in_db(session_id: str, new_system_message: str):
+    """
+    지정된 session_id의 system 메시지를 new_system_message로 교체합니다.
+    """
+    try:
+        with sqlite3.connect("chat_history.db") as conn:
+            cursor = conn.cursor()
+            # 우선 해당 세션의 기존 system 메시지를 모두 삭제
+            cursor.execute("""
+                DELETE FROM chat_history 
+                WHERE session_id = ? AND role = 'system'
+            """, (session_id,))
+            
+            # 새 system 메시지 삽입
+            cursor.execute("""
+                INSERT INTO chat_history (session_id, role, content, timestamp)
+                VALUES (?, 'system', ?, CURRENT_TIMESTAMP)
+            """, (session_id, new_system_message))
+            
+            conn.commit()
+        logger.info(f"[update_system_message_in_db] 세션 {session_id}의 system 메시지가 업데이트되었습니다.")
+    except Exception as e:
+        logger.error(f"[update_system_message_in_db] DB 업데이트 오류: {e}")
