@@ -15,6 +15,7 @@ import gradio as gr
 import logging
 import traceback
 import openai
+import anthropic
 
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
@@ -263,27 +264,59 @@ def generate_answer(history, selected_model, model_type, local_model_path=None, 
     #     model_id = "gpt-3.5-turbo"
     
     if model_type == "api":
-        if not api_key:
-            logger.error("OpenAI API Key가 missing.")
-            return "OpenAI API Key가 필요합니다."
-        openai.api_key = api_key
-        messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
-        logger.info(f"[*] OpenAI API 요청: {messages}")
-        
-        try:
-            response = openai.ChatCompletion.create(
-                model=selected_model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1024,
-                top_p=0.9
-            )
-            answer = response.choices[0].message["content"]
-            logger.info(f"[*] OpenAI 응답: {answer}")
-            return answer
-        except Exception as e:
-            logger.error(f"OpenAI API 오류: {str(e)}\n\n{traceback.format_exc()}")
-            return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
+        if "claude" in selected_model:
+            if not api_key:
+                logger.error("Anthropic API Key가 missing.")
+                return "Anthropic API Key가 필요합니다."
+            
+            client = anthropic.Client(api_key=api_key)
+            # Anthropic 메시지 형식으로 변환
+            messages = []
+            for msg in history:
+                if msg["role"] == "system":
+                    continue  # Claude API는 시스템 메시지를 별도로 처리하지 않음
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+            
+            logger.info(f"[*] Anthropic API 요청: {messages}")
+            
+            try:
+                response = client.messages.create(
+                    model=selected_model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1024
+                )
+                answer = response.content[0].text
+                logger.info(f"[*] Anthropic 응답: {answer}")
+                return answer
+            except Exception as e:
+                logger.error(f"Anthropic API 오류: {str(e)}\n\n{traceback.format_exc()}")
+                return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
+        else:
+            if not api_key:
+                logger.error("OpenAI API Key가 missing.")
+                return "OpenAI API Key가 필요합니다."
+            openai.api_key = api_key
+            messages = [{"role": msg['role'], "content": msg['content']} for msg in history]
+            logger.info(f"[*] OpenAI API 요청: {messages}")
+            
+            try:
+                response = openai.ChatCompletion.create(
+                    model=selected_model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1024,
+                    top_p=0.9
+                )
+                answer = response.choices[0].message["content"]
+                logger.info(f"[*] OpenAI 응답: {answer}")
+                return answer
+            except Exception as e:
+                logger.error(f"OpenAI API 오류: {str(e)}\n\n{traceback.format_exc()}")
+                return f"오류 발생: {str(e)}\n\n{traceback.format_exc()}"
     
     else:
         if not handler:
