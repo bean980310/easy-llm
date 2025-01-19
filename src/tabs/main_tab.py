@@ -367,9 +367,11 @@ class MainTab:
             "role": "system",
             "content": system_message_box_value
         }
+        
+        new_history = [system_message]
         # DB에 저장
-        save_chat_history_db([system_message], session_id=new_sid)
-        return new_sid, f"새 세션 생성: {new_sid}"
+        save_chat_history_db(new_history, session_id=new_sid)
+        return new_sid, f"현재 세션: {new_sid}", new_history
 
     def apply_session(self, chosen_sid: str):
         """
@@ -393,12 +395,24 @@ class MainTab:
     def delete_session(self, chosen_sid: str, current_sid: str):
         """
         특정 세션 삭제 로직
+        
+        Returns:
+            tuple: (modal_visible, modal_message, session_dropdown_update)
         """
         if not chosen_sid:
-            return "❌ 삭제할 세션을 선택하세요.", gr.update(value="", visible=False), gr.update()
+            return (
+                gr.update(visible=True),  # modal visible
+                "삭제할 세션을 선택하세요.",  # error message
+                gr.update()  # no dropdown update
+            )
+        
         if chosen_sid == current_sid:
-            return f"❌ 현재 활성 세션 '{chosen_sid}'은(는) 삭제할 수 없습니다.", gr.update(value="", visible=False), gr.update()
-        # DB에서 삭제
+            return (
+                gr.update(visible=True),  # modal visible
+                f"현재 활성 세션 '{chosen_sid}'은(는) 삭제할 수 없습니다.",  # error message
+                gr.update()  # no dropdown update
+            )
+            
         try:
             conn = sqlite3.connect("chat_history.db")
             c = conn.cursor()
@@ -408,13 +422,17 @@ class MainTab:
 
             sessions = get_existing_sessions()
             return (
-                f"✅ 세션 '{chosen_sid}'이(가) 삭제되었습니다.",
-                gr.update(value="", visible=False),  # 메시지나 UI 숨김
-                gr.update(choices=sessions, value=sessions[0] if sessions else None)
+                gr.update(visible=False),  # hide modal
+                f"세션 '{chosen_sid}'이(가) 삭제되었습니다.",  # success message
+                gr.update(choices=sessions, value=sessions[0] if sessions else None)  # update dropdown
             )
         except Exception as e:
             logger.error(f"세션 삭제 오류: {e}")
-            return f"❌ 세션 삭제 실패: {e}", gr.update(value="", visible=False), gr.update()
+            return (
+                gr.update(visible=True),  # keep modal visible
+                f"세션 삭제 실패: {e}",  # error message
+                gr.update()  # no dropdown update
+            )
 
     def initial_load_presets(self, language=None):
         """초기 프리셋 로딩 함수"""
@@ -587,4 +605,14 @@ def create_reset_confirm_modal():
     return (reset_modal, single_reset_content, all_reset_content, 
             cancel_btn, confirm_btn)
     
+def create_delete_session_modal():
+    """삭제 확인 모달 생성"""
+    with gr.Column(visible=False, elem_classes="delete-session-modal") as delete_modal:
+        gr.Markdown("# ⚠️ 세션 삭제 확인", elem_classes="delete-session-title")
+        message = gr.Markdown("", elem_classes="delete-session-message")
+        with gr.Row(elem_classes="delete-session-buttons"):
+            cancel_btn = gr.Button("취소", variant="secondary")
+            confirm_btn = gr.Button("삭제", variant="stop")
+                
+    return delete_modal, message, cancel_btn, confirm_btn
     

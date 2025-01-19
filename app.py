@@ -35,7 +35,8 @@ from src.tabs.main_tab import (
     characters,
     get_speech_manager,
     update_system_message_and_profile,
-    create_reset_confirm_modal
+    create_reset_confirm_modal,
+    create_delete_session_modal
 )
 
 from src.tabs.cache_tab import create_cache_tab
@@ -326,6 +327,8 @@ with gr.Blocks(css=css) as demo:
             )
             add_session_icon_btn = gr.Button("📝", elem_classes="icon-button", scale=1, variant="secondary")
             delete_session_icon_btn = gr.Button("🗑️", elem_classes="icon-button-delete", scale=1, variant="stop")
+            
+            delete_modal, delete_message, delete_cancel_btn, delete_confirm_btn = create_delete_session_modal()
         
         with gr.Row(elem_classes="model-container"):
             with gr.Column(scale=7):
@@ -463,7 +466,7 @@ with gr.Blocks(css=css) as demo:
             return gr.update(choices=[], value=None)
         return gr.update(choices=sessions, value=sessions[0])
         
-    def create_session(chosen_character, chosen_language, speech_manager_state):
+    def create_and_apply_session(chosen_character, chosen_language, speech_manager_state, history_state):
         """
         현재 캐릭터/언어에 맞춰 시스템 메시지를 가져온 뒤,
         새 세션을 생성합니다.
@@ -476,22 +479,40 @@ with gr.Blocks(css=css) as demo:
         new_system_msg = speech_manager.get_system_message()
 
         # 3) DB에 기록할 새 세션 만들기
-        new_sid, info = main_tab.create_new_session(new_system_msg)
+        new_sid, info, new_history = main_tab.create_new_session(new_system_msg)
 
-        return new_sid, info
+        sessions = get_existing_sessions()
+        return [
+            new_sid,
+            new_history,
+            gr.update(choices=sessions, value=new_sid),
+            info,
+            main_tab.filter_messages_for_chatbot(new_history)
+        ]
+    
+    # 이벤트 핸들러
+    def show_delete_confirm(selected_sid, current_sid):
+        """삭제 확인 모달 표시"""
+        if not selected_sid:
+            return gr.update(visible=True), "삭제할 세션을 선택하세요."
+        if selected_sid == current_sid:
+            return gr.update(visible=True), f"현재 활성 세션 '{selected_sid}'은(는) 삭제할 수 없습니다."
+        return gr.update(visible=True), f"세션 '{selected_sid}'을(를) 삭제하시겠습니까?"
             
     add_session_icon_btn.click(
-        fn=create_session,
+        fn=create_and_apply_session,
         inputs=[
             character_dropdown,    # chosen_character
             selected_language_state,  # chosen_language
-            speech_manager_state     # persona_speech_manager
+            speech_manager_state, # persona_speech_manager
+            history_state # current history
         ],
-        outputs=[]  # create_session이 (new_sid, info)를 반환하므로, 필요하면 여기서 받음
-    ).then(
-        fn=main_tab.refresh_sessions,
-        inputs=[],
-        outputs=[session_select_dropdown]
+        outputs=[
+            session_id_state,
+            history_state,
+            session_select_dropdown,
+            session_select_info,
+            chatbot]  # create_session이 (new_sid, info)를 반환하므로, 필요하면 여기서 받음
     )
         
     def delete_selected_session(chosen_sid):
@@ -499,16 +520,36 @@ with gr.Blocks(css=css) as demo:
         result_msg, _, updated_dropdown = main_tab.delete_session(chosen_sid, "demo_session")
         return result_msg, updated_dropdown
         
+    # 삭제 버튼 클릭 시 모달 표시
     delete_session_icon_btn.click(
-        fn=lambda: delete_selected_session(session_select_dropdown.value),
-        inputs=[],
-        outputs=[]  # 필요 시 Textbox나 Dropdown 업데이트
+        fn=show_delete_confirm,
+        inputs=[session_select_dropdown, session_id_state],
+        outputs=[delete_modal, delete_message]
+    )
+
+    # 취소 버튼
+    delete_cancel_btn.click(
+        fn=lambda: (gr.update(visible=False), ""),
+        outputs=[delete_modal, delete_message]
+    )
+
+    # 삭제 확인 버튼
+    delete_confirm_btn.click(
+        fn=main_tab.delete_session,
+        inputs=[session_select_dropdown, session_id_state],
+        outputs=[delete_modal, delete_message, session_select_dropdown]
     ).then(
         fn=main_tab.refresh_sessions,
         inputs=[],
         outputs=[session_select_dropdown]
     )
-                        
+    
+    demo.load(None, None, None).then(
+        fn=lambda evt: (gr.update(visible=False), "") if evt.key == "Escape" else (gr.update(), ""),
+        inputs=[],
+        outputs=[delete_modal, delete_message]
+    )
+    
     # 시드 입력과 상태 연결
     seed_input.change(
         fn=lambda seed: seed if seed is not None else 42,

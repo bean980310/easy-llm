@@ -343,4 +343,62 @@ css="""
         color: #9ca3af;
     }
 }
+.delete-session-modal {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 1000 !important;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 400px;
+    max-width: 90%;
+}
+
+.delete-session-modal::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+}
+
+.delete-session-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #374151;
+    margin-bottom: 1rem;
+}
+
+.delete-session-message {
+    color: #6B7280;
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+}
+
+.delete-session-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 다크모드 지원 */
+@media (prefers-color-scheme: dark) {
+    .delete-session-modal {
+        background: #2d2d2d;
+    }
+    
+    .delete-session-title {
+        color: #e5e7eb;
+    }
+    
+    .delete-session-message {
+        color: #9ca3af;
+    }
+}
 """
