@@ -68,6 +68,7 @@ class MainTab:
         self.preset_images=PRESET_IMAGES
         self.default_profile_image=DEFAULT_PROFILE_IMAGE
         self.characters=characters
+        self.reset_type = None
         
     def handle_change_preset(self, new_preset_name, history, language):
         """
@@ -230,6 +231,9 @@ class MainTab:
     def reset_session(self, history, chatbot, system_message_default, language=None, session_id="demo_session"):
         """
         특정 세션을 초기화하는 함수.
+        
+        Returns:
+            tuple: (reset_modal, single_content, all_content, msg, new_history, chatbot_history, status)
         """
         if language is None:
             language = self.default_language
@@ -237,7 +241,16 @@ class MainTab:
         try:
             success = delete_session_history(session_id)
             if not success:
-                return gr.update(), history, self.filter_messages_for_chatbot(history), "❌ 세션 초기화에 실패했습니다."
+                # 모달 닫고 실패 상태 반환
+                return (
+                    gr.update(visible=False),  # reset_modal
+                    gr.update(visible=False),  # single_content
+                    gr.update(visible=False),  # all_content
+                    gr.update(),               # msg
+                    history,                   # history 유지
+                    self.filter_messages_for_chatbot(history),  # chatbot
+                    "❌ 세션 초기화에 실패했습니다."  # status
+                )
 
             default_system = {
                 "role": "system",
@@ -248,15 +261,36 @@ class MainTab:
             save_chat_history_db(new_history, session_id=session_id)
             chatbot_history = self.filter_messages_for_chatbot(new_history)
 
-            return "", new_history, chatbot_history, "✅ 세션이 초기화되었습니다."
+            # 성공 시 모달 닫고 새 상태 반환
+            return (
+                gr.update(visible=False),  # reset_modal
+                gr.update(visible=False),  # single_content
+                gr.update(visible=False),  # all_content
+                "",                        # msg
+                new_history,              # new_history
+                chatbot_history,          # chatbot
+                "✅ 세션이 초기화되었습니다."  # status
+            )
 
         except Exception as e:
             logger.error(f"Error resetting session: {str(e)}")
-            return "", history, self.filter_messages_for_chatbot(history), f"❌ 세션 초기화 중 오류가 발생했습니다: {str(e)}"
+            # 오류 발생 시 모달 닫고 오류 상태 반환
+            return (
+                gr.update(visible=False),  # reset_modal
+                gr.update(visible=False),  # single_content
+                gr.update(visible=False),  # all_content
+                "",                        # msg
+                history,                   # history 유지
+                self.filter_messages_for_chatbot(history),  # chatbot
+                f"❌ 세션 초기화 중 오류가 발생했습니다: {str(e)}"  # status
+            )
 
     def reset_all_sessions(self, history, chatbot, system_message_default, language=None):
         """
         모든 세션을 초기화하는 함수.
+        
+        Returns:
+            tuple: (reset_modal, single_content, all_content, msg, new_history, chatbot_history, status)
         """
         if language is None:
             language = self.default_language
@@ -264,7 +298,16 @@ class MainTab:
         try:
             success = delete_all_sessions()
             if not success:
-                return gr.update(), history, self.filter_messages_for_chatbot(history), "❌ 모든 세션 초기화에 실패했습니다."
+                # 모달 닫고 실패 상태 반환
+                return (
+                    gr.update(visible=False),  # reset_modal
+                    gr.update(visible=False),  # single_content
+                    gr.update(visible=False),  # all_content
+                    gr.update(),               # msg
+                    history,                   # history 유지
+                    self.filter_messages_for_chatbot(history),  # chatbot
+                    "❌ 모든 세션 초기화에 실패했습니다."  # status
+                )
 
             default_system = {
                 "role": "system",
@@ -275,11 +318,29 @@ class MainTab:
             save_chat_history_db(new_history, session_id="demo_session")
             chatbot_history = self.filter_messages_for_chatbot(new_history)
 
-            return "", new_history, chatbot_history, "✅ 모든 세션이 초기화되었습니다."
+            # 성공 시 모달 닫고 새 상태 반환
+            return (
+                gr.update(visible=False),  # reset_modal
+                gr.update(visible=False),  # single_content
+                gr.update(visible=False),  # all_content
+                "",                        # msg
+                new_history,              # new_history
+                chatbot_history,          # chatbot
+                "✅ 모든 세션이 초기화되었습니다."  # status
+            )
 
         except Exception as e:
             logger.error(f"Error resetting all sessions: {str(e)}")
-            return "", history, self.filter_messages_for_chatbot(history), f"❌ 모든 세션 초기화 중 오류가 발생했습니다: {str(e)}"
+            # 오류 발생 시 모달 닫고 오류 상태 반환
+            return (
+                gr.update(visible=False),  # reset_modal
+                gr.update(visible=False),  # single_content
+                gr.update(visible=False),  # all_content
+                "",                        # msg
+                history,                   # history 유지
+                self.filter_messages_for_chatbot(history),  # chatbot
+                f"❌ 모든 세션 초기화 중 오류가 발생했습니다: {str(e)}"  # status
+            )
 
     def refresh_preset_list(self, language=None):
         """프리셋 목록을 갱신하는 함수."""
@@ -451,6 +512,34 @@ class MainTab:
         updated_list = sorted(list(dict.fromkeys(updated_list)))
         return gr.update(choices=updated_list, value=updated_list[0] if updated_list else None)
     
+    def show_reset_modal(self, reset_type):
+        """초기화 확인 모달 표시"""
+        self.reset_type = reset_type
+        return (
+            gr.update(visible=True),  # modal
+            gr.update(visible=reset_type == "single"),  # single_content
+            gr.update(visible=reset_type == "all"),  # all_content
+        )
+
+    def hide_reset_modal(self):
+        """초기화 확인 모달 숨김"""
+        return (
+            gr.update(visible=False),  # modal
+            gr.update(visible=False),  # single_content
+            gr.update(visible=False),  # all_content
+        )
+
+    def handle_reset_confirm(self, history, chatbot, system_msg, language=None, session_id="demo_session"):
+        """초기화 확인 시 처리"""
+        if self.reset_type == "single":
+            result = self.reset_session(history, chatbot, system_msg, language, session_id)
+        else:
+            result = self.reset_all_sessions(history, chatbot, system_msg, language)
+        
+        # 모달 닫기
+        modal_updates = self.hide_reset_modal()
+        return (*modal_updates, *result)
+    
 def update_system_message_and_profile(
     character_name: str, 
     language_display_name: str, 
@@ -480,5 +569,22 @@ def update_system_message_and_profile(
     except ValueError as ve:
         logger.error(f"Character setting error: {ve}")
         return "시스템 메시지 로딩 중 오류가 발생했습니다.", None
+    
+def create_reset_confirm_modal():
+    """초기화 확인 모달 생성"""
+    with gr.Column(visible=False, elem_classes="reset-confirm-modal") as reset_modal:
+        gr.Markdown("# ⚠️ 확인", elem_classes="reset-confirm-title")
+        with gr.Column() as single_reset_content:
+            gr.Markdown("현재 세션의 모든 대화 내용이 삭제됩니다. 계속하시겠습니까?", 
+                       elem_classes="reset-confirm-message")
+        with gr.Column(visible=False) as all_reset_content:
+            gr.Markdown("모든 세션의 대화 내용이 삭제됩니다. 계속하시겠습니까?", 
+                       elem_classes="reset-confirm-message")
+        with gr.Row(elem_classes="reset-confirm-buttons"):
+            cancel_btn = gr.Button("취소", variant="secondary")
+            confirm_btn = gr.Button("확인", variant="primary")
+            
+    return (reset_modal, single_reset_content, all_reset_content, 
+            cancel_btn, confirm_btn)
     
     

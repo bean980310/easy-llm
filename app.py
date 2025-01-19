@@ -35,6 +35,7 @@ from src.tabs.main_tab import (
     characters,
     get_speech_manager,
     update_system_message_and_profile,
+    create_reset_confirm_modal
 )
 
 from src.tabs.cache_tab import create_cache_tab
@@ -408,6 +409,7 @@ with gr.Blocks(css=css) as demo:
                         info=_("seed_info"),
                         elem_classes="seed-input"
                     )
+                    reset_modal, single_reset_content, all_reset_content, cancel_btn, confirm_btn = create_reset_confirm_modal()
                     preset_dropdown = gr.Dropdown(
                         label="프리셋 선택",
                         choices=get_preset_choices(default_language),
@@ -715,64 +717,6 @@ with gr.Blocks(css=css) as demo:
         outputs=[chatbot]
     )
         
-    # 초기화 버튼 클릭 시 확인 메시지 표시
-    reset_btn.click(
-        fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-        inputs=[],
-        outputs=[reset_confirm_row, reset_yes_btn, reset_no_btn]
-    )
-    reset_all_btn.click(
-        fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-        inputs=[],
-        outputs=[reset_all_confirm_row, reset_all_yes_btn, reset_all_no_btn]
-    )
-
-    # "예" 버튼 클릭 시 세션 초기화 수행
-    reset_yes_btn.click(
-        fn=main_tab.reset_session,
-        inputs=[history_state, chatbot, system_message_box, selected_language_state, session_id_state],
-        outputs=[msg, history_state, chatbot, status_text],
-        queue=False
-    ).then(
-        fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
-        inputs=[],
-        outputs=[reset_confirm_row],
-        queue=False
-    )
-
-    # "아니요" 버튼 클릭 시 확인 메시지 숨김
-    reset_no_btn.click(
-        fn=lambda: gr.update(visible=False),
-        inputs=[],
-        outputs=[reset_confirm_row],
-        queue=False
-    )
-
-    # "모든 세션 초기화"의 "예" 버튼 클릭 시 모든 세션 초기화 수행
-    reset_all_yes_btn.click(
-        fn=main_tab.reset_all_sessions,
-        inputs=[history_state, chatbot, system_message_box, selected_language_state],
-        outputs=[msg, history_state, chatbot, status_text],
-        queue=False
-    ).then(
-        fn=lambda: gr.update(visible=False),  # 확인 메시지 숨김
-        inputs=[],
-        outputs=[reset_all_confirm_row],
-        queue=False
-    ).then(
-        fn=main_tab.refresh_sessions,
-        inputs=[],
-        outputs=[session_select_dropdown]
-    )
-
-    # "모든 세션 초기화"의 "아니요" 버튼 클릭 시 확인 메시지 숨김
-    reset_all_no_btn.click(
-        fn=lambda: gr.update(visible=False),
-        inputs=[],
-        outputs=[reset_all_confirm_row],
-        queue=False
-    )
-        
     demo.load(
         fn=main_tab.refresh_sessions,
         inputs=[],
@@ -789,7 +733,37 @@ with gr.Blocks(css=css) as demo:
         inputs=[history_state],
         outputs=[chatbot]
     )
-        
+    
+    reset_btn.click(
+        fn=lambda: main_tab.show_reset_modal("single"),
+        outputs=[reset_modal, single_reset_content, all_reset_content]
+    )
+    reset_all_btn.click(
+        fn=lambda: main_tab.show_reset_modal("all"),
+        outputs=[reset_modal, single_reset_content, all_reset_content]
+    )
+    
+    cancel_btn.click(
+        fn=main_tab.hide_reset_modal,
+        outputs=[reset_modal, single_reset_content, all_reset_content]
+    )
+    
+    confirm_btn.click(
+        fn=main_tab.handle_reset_confirm,
+        inputs=[history_state, chatbot, system_message_box, selected_language_state, session_id_state],
+        outputs=[reset_modal, single_reset_content, all_reset_content, 
+                msg, history_state, chatbot, status_text]
+    ).then(
+        fn=main_tab.refresh_sessions,  # 세션 목록 갱신 (전체 초기화의 경우)
+        outputs=[session_select_dropdown]
+    )
+    
+    demo.load(None, None, None).then(
+        fn=lambda evt: gr.update(visible=False) if evt.key == "Escape" else gr.update(),
+        inputs=[],
+        outputs=[reset_modal]
+    )
+            
     with gr.Column(visible=False, elem_classes="settings-popup") as settings_popup:
         with gr.Row(elem_classes="popup-header"):
             gr.Markdown("## Settings")

@@ -286,4 +286,61 @@ css="""
     gap: 10px;
     margin-top: 20px;
 }
+
+.reset-confirm-modal {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 1000 !important;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 400px;
+    max-width: 90%;
+}
+
+.reset-confirm-modal::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+}
+
+.reset-confirm-title {
+    margin-bottom: 15px;
+    font-weight: bold;
+    color: #374151;
+}
+
+.reset-confirm-message {
+    margin-bottom: 20px;
+    color: #6B7280;
+}
+
+.reset-confirm-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 다크 모드 지원 */
+@media (prefers-color-scheme: dark) {
+    .reset-confirm-modal {
+        background: #2d2d2d;
+    }
+    
+    .reset-confirm-title {
+        color: #e5e7eb;
+    }
+    
+    .reset-confirm-message {
+        color: #9ca3af;
+    }
+}
 """
