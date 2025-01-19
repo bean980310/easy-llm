@@ -587,6 +587,15 @@ with gr.Blocks(css=css) as demo:
     )
         
     bot_message_inputs = [session_id_state, history_state, model_dropdown, custom_model_path_state, image_input, api_key_text, selected_device_state, seed_state]
+    
+    demo.load(
+        fn=lambda selected_model: (
+            main_tab.toggle_api_key_visibility(selected_model),
+            main_tab.toggle_image_input_visibility(selected_model)
+        ),
+        inputs=[model_dropdown],
+        outputs=[api_key_text, image_input]
+    )
         
     def update_character_languages(selected_language, selected_character):
         """
