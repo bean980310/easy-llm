@@ -515,9 +515,12 @@ class MainTab:
             # 중복 제거 후 정렬
             all_models = sorted(list(dict.fromkeys(all_models)))
             return gr.update(choices=all_models, value=all_models[0] if all_models else None)
-                
-        # 개별 항목이면 => 해당 유형의 로컬 모델 + "사용자 지정 모델 경로 변경"만
-        if selected_type == "transformers":
+        
+        # API 모델만 선택한 경우
+        if selected_type == "api":
+            updated_list = api_models
+        # 개별 로컬 모델 유형 선택
+        elif selected_type == "transformers":
             updated_list = transformers_local
         elif selected_type == "gguf":
             updated_list = gguf_local

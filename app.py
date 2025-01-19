@@ -331,10 +331,10 @@ with gr.Blocks(css=css) as demo:
             delete_modal, delete_message, delete_cancel_btn, delete_confirm_btn = create_delete_session_modal()
         
         with gr.Row(elem_classes="model-container"):
-            with gr.Column(scale=7):
+            with gr.Column(scale=8):
                 model_type_dropdown = gr.Radio(
                     label=_("model_type_label"),
-                    choices=["all", "transformers", "gguf", "mlx"],
+                    choices=["all", "api", "transformers", "gguf", "mlx"],
                     value="all",
                     elem_classes="model-dropdown"
                 )
