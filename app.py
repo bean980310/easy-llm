@@ -809,9 +809,33 @@ with gr.Blocks(css=css) as demo:
     )
     
     demo.load(None, None, None).then(
-        fn=lambda evt: gr.update(visible=False) if evt.key == "Escape" else gr.update(),
+        fn=lambda evt: (
+            gr.update(visible=False),  # reset_modal
+            gr.update(visible=False),  # single_content
+            gr.update(visible=False),  # all_content
+            None,  # msg (변경 없음)
+            None,  # history (변경 없음)
+            None,  # chatbot (변경 없음)
+            None   # status (변경 없음)
+        ) if evt.key == "Escape" else (
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            None,
+            None,
+            None,
+            None
+        ),
         inputs=[],
-        outputs=[reset_modal]
+        outputs=[
+            reset_modal,
+            single_reset_content,
+            all_reset_content,
+            msg,
+            history_state,
+            chatbot,
+            status_text
+        ]
     )
             
     with gr.Column(visible=False, elem_classes="settings-popup") as settings_popup:
